@@ -25,6 +25,7 @@ CREATE TABLE kb_sync_state (
     file_path       TEXT NOT NULL,
     content_hash    TEXT NOT NULL,
     last_synced_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    UNIQUE (vertical, file_path)
 );
 
 CREATE TABLE agent_runs (

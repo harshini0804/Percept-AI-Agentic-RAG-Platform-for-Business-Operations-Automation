@@ -4,6 +4,7 @@ import Submit from "./pages/Submit";
 import RunDetail from "./pages/RunDetail";
 import Escalations from "./pages/Escalations";
 import Notifications from "./pages/Notifications";
+import Admin from "./pages/Admin";
 
 
 const NAV_ITEMS = [
@@ -40,6 +41,7 @@ function App() {
             <Route path="/runs/:runId" element={<RunDetail />} />
             <Route path="/escalations" element={<Escalations />} />
             <Route path="/notifications" element={<Notifications />} />
+            <Route path="/admin" element={<Admin />} />
           </Routes>
         </main>
       </div>

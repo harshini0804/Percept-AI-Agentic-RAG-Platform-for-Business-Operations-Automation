@@ -3,6 +3,7 @@ import Dashboard from "./pages/Dashboard.tsx";
 import Submit from "./pages/Submit";
 import RunDetail from "./pages/RunDetail";
 import Escalations from "./pages/Escalations";
+import Notifications from "./pages/Notifications";
 
 
 const NAV_ITEMS = [
@@ -38,6 +39,7 @@ function App() {
             <Route path="/submit" element={<Submit />} />
             <Route path="/runs/:runId" element={<RunDetail />} />
             <Route path="/escalations" element={<Escalations />} />
+            <Route path="/notifications" element={<Notifications />} />
           </Routes>
         </main>
       </div>

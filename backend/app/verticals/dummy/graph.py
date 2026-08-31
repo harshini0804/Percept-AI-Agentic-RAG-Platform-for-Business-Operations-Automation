@@ -87,3 +87,8 @@ def run_dummy_vertical(input_text: str) -> AgentState:
     graph = build_dummy_graph()
     final_state = graph.invoke(initial_state)
     return final_state
+
+
+from app.core.vertical_registry import register_vertical
+
+register_vertical("dummy", run_dummy_vertical)

@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api import agent_runs, escalations
+from app.api import agent_runs, escalations, notifications
 
 import app.verticals.dummy.tools
 
@@ -7,6 +7,8 @@ app = FastAPI(title="Agentic RAG Platform - Backend")
 
 app.include_router(agent_runs.router)
 app.include_router(escalations.router)
+app.include_router(notifications.router)
+
 
 
 @app.get("/health")

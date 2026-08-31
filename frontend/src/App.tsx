@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import Dashboard from "./pages/Dashboard.tsx";
 import Submit from "./pages/Submit";
 import RunDetail from "./pages/RunDetail";
+import Escalations from "./pages/Escalations";
 
 
 const NAV_ITEMS = [
@@ -36,6 +37,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/submit" element={<Submit />} />
             <Route path="/runs/:runId" element={<RunDetail />} />
+            <Route path="/escalations" element={<Escalations />} />
           </Routes>
         </main>
       </div>

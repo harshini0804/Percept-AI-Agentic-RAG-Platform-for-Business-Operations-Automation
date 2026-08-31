@@ -5,6 +5,7 @@ import RunDetail from "./pages/RunDetail";
 import Escalations from "./pages/Escalations";
 import Notifications from "./pages/Notifications";
 import Admin from "./pages/Admin";
+import Evaluation from "./pages/Evaluation";
 
 
 const NAV_ITEMS = [
@@ -42,6 +43,7 @@ function App() {
             <Route path="/escalations" element={<Escalations />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/evaluation" element={<Evaluation />} />
           </Routes>
         </main>
       </div>

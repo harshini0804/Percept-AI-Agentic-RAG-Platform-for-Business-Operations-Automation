@@ -147,3 +147,21 @@ def create_notification(run_id: str, recipient: str, message: str) -> str:
         return str(notification_id)
     finally:
         conn.close()
+
+def update_run_status(run_id: str, status: str) -> None:
+    """
+    Updates only the status of a run, leaving its confidence
+    untouched. Used when a human resolves an escalation — the run's
+    original confidence score (from when it first escalated) should
+    be preserved, not overwritten.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE agent_runs SET status = %s WHERE id = %s;",
+                (status, run_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()

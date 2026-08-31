@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import Dashboard from "./pages/Dashboard.tsx";
+import Submit from "./pages/Submit";
+import RunDetail from "./pages/RunDetail";
+
 
 const NAV_ITEMS = [
   { path: "/", label: "Dashboard" },
@@ -31,6 +34,8 @@ function App() {
         <main className="flex-1 overflow-y-auto p-6 bg-slate-50">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/submit" element={<Submit />} />
+            <Route path="/runs/:runId" element={<RunDetail />} />
           </Routes>
         </main>
       </div>

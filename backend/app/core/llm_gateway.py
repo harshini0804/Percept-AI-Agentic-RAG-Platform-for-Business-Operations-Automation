@@ -6,11 +6,12 @@ directly. Switching providers later means changing only this file.
 
 import os
 import json
-from groq import Groq
+from groq import Groq, BadRequestError
 
 _client = None
 
 DEFAULT_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
 
 def _get_client() -> Groq:
     global _client
@@ -45,6 +46,16 @@ def call_llm(
     `tools` should be the list returned by
     tool_registry.get_tools_for_vertical(), reformatted for Groq's
     OpenAI-compatible tool schema (see _format_tools_for_groq below).
+
+    Known gpt-oss quirk (Groq-specific): the model sometimes emits
+    an internal "Harmony format" reasoning/commentary channel that
+    Groq misparses as an attempted call to a tool that was never
+    offered (observed phantom names: "commentary", "json" — the
+    name varies, so we don't match on it). This raises a 400 error
+    with code "tool_use_failed" and the phrase "was not in
+    request.tools". If that specific error occurs, we retry once
+    with tools stripped out, letting the model just respond in
+    plain text instead of attempting a tool call.
     """
     client = _get_client()
 
@@ -58,7 +69,22 @@ def call_llm(
         kwargs["tools"] = _format_tools_for_groq(tools)
         kwargs["tool_choice"] = "auto"
 
-    response = client.chat.completions.create(**kwargs)
+    try:
+        response = client.chat.completions.create(**kwargs)
+    except BadRequestError as e:
+        error_str = str(e).lower()
+        is_phantom_tool_bug = (
+            tools is not None
+            and "tool_use_failed" in error_str
+            and "was not in request.tools" in error_str
+        )
+        if is_phantom_tool_bug:
+            kwargs.pop("tools", None)
+            kwargs.pop("tool_choice", None)
+            response = client.chat.completions.create(**kwargs)
+        else:
+            raise
+
     message = response.choices[0].message
 
     tool_calls = []

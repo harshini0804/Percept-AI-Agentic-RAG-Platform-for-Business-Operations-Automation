@@ -91,22 +91,31 @@ def complete_agent_run(run_id: str, status: str, confidence: float) -> None:
         conn.close()
 
 
-def create_escalation(run_id: str, reason: str, assigned_to: str | None = None) -> str:
+def create_escalation(
+    run_id: str,
+    reason: str,
+    assigned_to: str | None = None,
+    pending_action: dict | None = None,
+) -> str:
     """
     Routes a run to the HITL queue (Section 3.1 guardrails) when
-    confidence falls below the action threshold. Feeds the
-    Escalation/HITL queue shared UI screen (Section 5).
+    confidence falls below the action threshold. pending_action
+    stores {tool_name, arguments} so an approved escalation can
+    later call execute_tool() with the same action the confidence
+    gate would have fired autonomously — this is what makes
+    "human-in-the-loop" actually loop back to an action, not a
+    dead end.
     """
     conn = get_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO escalations (run_id, reason, assigned_to, status)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO escalations (run_id, reason, assigned_to, status, pending_action)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id;
                 """,
-                (run_id, reason, assigned_to, "open"),
+                (run_id, reason, assigned_to, "open", Json(pending_action) if pending_action else None),
             )
             escalation_id = cur.fetchone()["id"]
         conn.commit()

@@ -133,6 +133,7 @@ def reason_node(state: AgentState) -> AgentState:
 # Stage 5 — Confidence-gate on action
 # ---------------------------------------------------------------
 
+
 def action_gate_node(
     state: AgentState,
     confidence: float,
@@ -140,13 +141,14 @@ def action_gate_node(
     action_tool_args: Optional[dict] = None,
     escalation_reason: Optional[str] = None,
 ) -> AgentState:
+
     """
-    Fires a write tool if confidence clears the threshold; otherwise
-    escalates. confidence/action_tool_name/escalation_reason are
-    passed in explicitly rather than parsed here, since extracting
-    them from the LLM's response is vertical-specific (each
-    vertical's output shape differs, per Section 8).
-    """
+        Fires a write tool if confidence clears the threshold; otherwise
+        escalates. confidence/action_tool_name/escalation_reason are
+        passed in explicitly rather than parsed here, since extracting
+        them from the LLM's response is vertical-specific (each
+        vertical's output shape differs, per Section 8).
+        """
     state["confidence"] = confidence
 
     if confidence >= state["confidence_threshold"] and action_tool_name:
@@ -158,15 +160,19 @@ def action_gate_node(
         complete_agent_run(state["run_id"], status="completed", confidence=confidence)
     else:
         reason = escalation_reason or "Confidence below action threshold."
-        create_escalation(state["run_id"], reason=reason)
+        pending_action = (
+            {"tool_name": action_tool_name, "arguments": action_tool_args or {}}
+            if action_tool_name
+            else None
+        )
+        create_escalation(state["run_id"], reason=reason, pending_action=pending_action)
         state["action_taken"] = None
         state["escalated"] = True
         state["escalation_reason"] = reason
-        log_decision(state["run_id"], "escalation", {"reason": reason})
+        log_decision(state["run_id"], "escalation", {"reason": reason, "pending_action": pending_action})
         complete_agent_run(state["run_id"], status="escalated", confidence=confidence)
 
     return state
-
 
 # ---------------------------------------------------------------
 # Helper: any vertical can use this to open a run before building

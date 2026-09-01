@@ -24,7 +24,7 @@ CREATE TABLE kb_sync_state (
     vertical        TEXT NOT NULL,
     file_path       TEXT NOT NULL,
     content_hash    TEXT NOT NULL,
-    last_synced_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    last_synced_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (vertical, file_path)
 );
 
@@ -54,6 +54,7 @@ CREATE TABLE escalations (
     reason      TEXT,
     assigned_to TEXT,
     status      TEXT NOT NULL DEFAULT 'open',
+    pending_action  JSONB,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

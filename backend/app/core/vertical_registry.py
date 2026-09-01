@@ -4,6 +4,12 @@ its own "run" entry point (e.g. run_dummy_vertical), so the shared
 POST /agent-runs endpoint can invoke any vertical generically without
 hardcoding which verticals exist. Same registration pattern as
 tool_registry.py.
+
+Convention (not type-enforced by this module, which stays payload-
+agnostic on purpose): a registered run function should accept an
+AgentRunInput (app.schemas.agent_contract) and return a validated
+AgentRunOutput directly — AgentRunOutput now includes run_id, so no
+wrapping/splicing is needed at this boundary.
 """
 
 from typing import Callable, Any
@@ -29,15 +35,16 @@ def get_registered_verticals() -> list[str]:
     return list(_vertical_registry.keys())
 
 
-def run_vertical(vertical: str, input_text: str) -> dict[str, Any]:
+def run_vertical(vertical: str, agent_input: Any) -> dict[str, Any]:
     """
-    Looks up and invokes the given vertical's run function. Raises
-    KeyError if no such vertical is registered — same fail-loud
-    pattern as tool_registry.execute_tool().
+    Looks up and invokes the given vertical's run function with
+    agent_input (see module docstring for the expected AgentRunInput
+    convention). Raises KeyError if no such vertical is registered —
+    same fail-loud pattern as tool_registry.execute_tool().
     """
     if vertical not in _vertical_registry:
         raise KeyError(
             f"No vertical named '{vertical}' is registered. "
             f"Registered verticals: {get_registered_verticals()}"
         )
-    return _vertical_registry[vertical](input_text)
+    return _vertical_registry[vertical](agent_input)

@@ -295,3 +295,8 @@ def test_submit_run_dummy_vertical_end_to_end(monkeypatch):
     assert body["status"] == "completed"
     assert body["confidence"] == pytest.approx(0.95)
     assert body["escalated"] is False
+    # Phase B: confirms the reconciled contract's actions_taken field
+    # is genuinely populated, not just present-but-empty.
+    assert len(body["actions_taken"]) == 1
+    assert body["actions_taken"][0]["action_name"] == "log_dummy_action"
+    assert body["escalation_reason"] is None

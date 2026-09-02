@@ -15,6 +15,20 @@ import pytest
 from app.core.embeddings import upsert_embedding
 from app.verticals.dummy.graph import build_dummy_graph
 from app.core.orchestration import start_run
+import app.core.documents as documents_module
+
+
+@pytest.fixture(autouse=True)
+def _isolated_submitted_root(monkeypatch, tmp_path):
+    """
+    Redirects app.core.documents.SUBMITTED_ROOT to an isolated
+    tmp_path for every test in this file — required for the two
+    tests below that call create_document(), which otherwise tries
+    to create /app/uploads/submitted, a path that only exists inside
+    the Docker container. Harmless no-op for tests that don't touch
+    documents at all.
+    """
+    monkeypatch.setattr(documents_module, "SUBMITTED_ROOT", tmp_path / "submitted")
 
 
 def _fake_llm_response(confidence: float, should_act: bool, reason: str):

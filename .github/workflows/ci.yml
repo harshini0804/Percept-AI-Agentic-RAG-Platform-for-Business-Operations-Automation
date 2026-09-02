@@ -59,6 +59,7 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: postgresql://rag_user:rag_password@localhost:5432/rag_platform_test
+          STAGING_ROOT: /tmp/test_uploads/staging
         run: pytest -v
 
   frontend-build:

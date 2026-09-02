@@ -19,8 +19,22 @@ from app.core.logging_service import (
     create_escalation,
     create_notification,
 )
+import app.core.documents as documents_module
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_submitted_root(monkeypatch, tmp_path):
+    """
+    Redirects app.core.documents.SUBMITTED_ROOT to an isolated
+    tmp_path for every test in this file — required for the
+    /agent-runs/upload tests, which otherwise try to create
+    /app/uploads/submitted, a path that only exists inside the
+    Docker container. Harmless no-op for tests that never hit the
+    upload endpoint.
+    """
+    monkeypatch.setattr(documents_module, "SUBMITTED_ROOT", tmp_path / "submitted")
 
 
 def test_health_check():

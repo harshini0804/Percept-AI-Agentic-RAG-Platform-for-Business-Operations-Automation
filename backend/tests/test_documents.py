@@ -1,11 +1,25 @@
 """
 Tests for app.core.documents (Section 4.1, Phase C) — tracking
 directly-submitted files and resolving them back to extracted text.
+
+SUBMITTED_ROOT is redirected to an isolated tmp_path for every test
+(matching how test_ingestion.py isolates STAGING_ROOT) — this is
+required, not optional: the real default (a sibling of STAGING_ROOT,
+normally /app/uploads/submitted) only exists inside the Docker
+container, and unprivileged environments (including GitHub Actions'
+runner user) correctly get PermissionError trying to create /app at
+the filesystem root outside a container.
 """
 
 import pytest
 from app.core.db import get_connection
+import app.core.documents as documents_module
 from app.core.documents import create_document, resolve_document_text
+
+
+@pytest.fixture(autouse=True)
+def _isolated_submitted_root(monkeypatch, tmp_path):
+    monkeypatch.setattr(documents_module, "SUBMITTED_ROOT", tmp_path / "submitted")
 
 
 def _fetch_document(document_id):

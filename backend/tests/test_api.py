@@ -141,17 +141,12 @@ def test_resolve_escalation_reject_does_not_fire_action():
     assert len(action_decisions) == 0
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Known gap (Phase F, item F1): rejecting an escalation updates "
-        "escalations.status to 'rejected' but never updates the underlying "
-        "agent_runs.status away from 'escalated' — so a rejected/closed "
-        "run still shows as 'escalated' (pending) on the Dashboard "
-        "indefinitely. Remove this xfail once F1 is fixed."
-    ),
-    strict=True,
-)
+
 def test_resolve_escalation_reject_closes_out_the_run_status():
+    """
+    Phase F, item F1 (fixed): rejecting an escalation must close out
+    the underlying run, not leave it stuck at 'escalated' forever.
+    """
     run_id = create_agent_run(vertical="dummy", trigger_type="upload")
     # Mirrors what action_gate_node actually does when it escalates —
     # sets the run itself to 'escalated', not just the escalation row.
@@ -161,7 +156,7 @@ def test_resolve_escalation_reject_closes_out_the_run_status():
     client.post(f"/escalations/{escalation_id}/resolve", json={"approve": False})
 
     run_response = client.get(f"/agent-runs/{run_id}")
-    assert run_response.json()["status"] != "escalated"
+    assert run_response.json()["status"] == "rejected"
 
 
 def test_resolve_escalation_approve_without_pending_action_returns_400():

@@ -101,7 +101,9 @@ def resolve_escalation(escalation_id: str, body: ResolveEscalationRequest):
                 )
                 update_run_status(escalation["run_id"], status="completed")
                 new_status = "approved"
+                
             else:
+                update_run_status(escalation["run_id"], status="rejected")
                 new_status = "rejected"
 
             cur.execute(

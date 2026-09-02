@@ -3,6 +3,8 @@ from app.api import agent_runs, escalations, notifications, admin, evaluation, s
 from fastapi.middleware.cors import CORSMiddleware
 import app.verticals.dummy.tools
 import app.verticals.dummy.graph  
+import app.verticals.post_incident.tools   # noqa: F401 — registers post_incident tools
+import app.verticals.post_incident.graph   # noqa: F401 — registers post_incident vertical
 
 app = FastAPI(title="Agentic RAG Platform - Backend")
 

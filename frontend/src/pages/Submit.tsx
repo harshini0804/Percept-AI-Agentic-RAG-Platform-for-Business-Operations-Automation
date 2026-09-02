@@ -10,6 +10,7 @@ import { submitRun } from "../api/agentRuns";
 // (beyond a single text box) get added per vertical later, reusing
 // this shell.
 const AVAILABLE_VERTICALS = [
+  { value: "post_incident", label: "Post-Incident Knowledge Synthesis" },
   { value: "dummy", label: "Dummy (test vertical)" },
 ];
 

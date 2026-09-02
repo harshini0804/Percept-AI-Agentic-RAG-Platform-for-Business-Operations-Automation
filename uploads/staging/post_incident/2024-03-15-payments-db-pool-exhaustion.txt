@@ -1,0 +1,47 @@
+# Incident: Database Connection Pool Exhaustion in Payments Service
+Date: 2024-03-15
+Service: payments-service
+Severity: P1
+
+## Summary
+The payments-service experienced a complete outage for 47 minutes due to database connection pool exhaustion. All payment processing — card charges, refunds, and settlement batches — failed during this window. The incident was triggered by a surge in retry traffic from the order-service after a brief network blip between the application tier and the primary PostgreSQL cluster.
+
+## Timeline
+- 14:02 UTC — Network monitoring detects a 3-second packet loss event between app subnet and DB subnet.
+- 14:02 UTC — payments-service begins returning 500 errors on /charge endpoint.
+- 14:03 UTC — order-service retry logic kicks in, tripling request volume to payments-service.
+- 14:05 UTC — Connection pool (HikariCP, max_pool_size=20) fully saturated. New requests queue indefinitely.
+- 14:08 UTC — PagerDuty alert fires: "payments-service error rate > 50%."
+- 14:12 UTC — On-call engineer begins investigation. Identifies connection pool as bottleneck.
+- 14:25 UTC — Attempted hot-fix: increase max_pool_size to 50 via config change. Requires pod restart.
+- 14:32 UTC — Rolling restart complete. Pool size increased but leaked connections from crashed threads still held.
+- 14:40 UTC — Engineer manually kills stale DB connections via pg_terminate_backend().
+- 14:49 UTC — Service fully recovered. Payment processing resumes.
+- 15:30 UTC — All queued orders re-processed successfully.
+
+## Root Cause
+The payments-service uses HikariCP with a max_pool_size of 20 and a connection_timeout of 30 seconds. When the 3-second network blip occurred, several in-flight queries timed out but their connections were not properly released back to the pool due to a missing finally block in the transaction wrapper. The order-service's exponential backoff was configured with a multiplier of 1 (effectively linear retry), causing a retry storm that overwhelmed the already-depleted pool.
+
+Contributing factors:
+1. No connection leak detection configured in HikariCP (leakDetectionThreshold was unset).
+2. order-service retry policy lacked jitter and had an aggressive base interval of 200ms.
+3. max_pool_size=20 was undersized for peak traffic (95th percentile concurrent queries = 18).
+
+## Impact
+- 47 minutes of complete payment processing outage.
+- 12,847 failed payment attempts.
+- Estimated revenue impact: $340,000 in delayed transactions (all eventually processed).
+- 3 enterprise customers reported SLA violations.
+
+## Mitigation
+1. Added finally block to release connections in all transaction wrappers.
+2. Enabled HikariCP leakDetectionThreshold (set to 60 seconds).
+3. Increased max_pool_size from 20 to 50, with min_idle set to 10.
+4. Updated order-service retry policy: exponential backoff with jitter, base 500ms, max 3 retries.
+5. Added connection pool utilization metric to Grafana dashboard with alert at 80%.
+
+## Lessons Learned
+- Connection pools are a shared, finite resource. Leak detection must be on by default, not opt-in.
+- Retry storms from upstream services are the most common amplifier of partial failures. Every service-to-service retry policy must include jitter.
+- The 3-second network blip would have been a non-event if connection cleanup was correct. The root cause was not the network — it was the resource leak.
+- Pool sizing should be based on measured p95 concurrency, not guesswork. We will add a quarterly pool-sizing review to capacity planning.

@@ -1,0 +1,52 @@
+# Incident: Blue-Green Deployment Rollback Failure
+Date: 2024-11-18
+Service: order-service
+Severity: P2
+
+## Summary
+A failed deployment of order-service v2.14.0 caused 38 minutes of degraded order processing. The deployment introduced a database schema migration that was not backward-compatible, making the automated blue-green rollback fail silently. The rollback script reported success but the "blue" (old) version could not read data written by the "green" (new) version during the 4-minute window it was live, resulting in 2,847 orders stuck in an unprocessable state.
+
+## Timeline
+- 11:00 UTC — Deployment pipeline begins blue-green rollout of order-service v2.14.0 to production.
+- 11:01 UTC — Green environment (v2.14.0) starts receiving 10% of traffic (canary phase).
+- 11:02 UTC — Schema migration runs: adds NOT NULL column `fulfillment_priority` to `orders` table with no default value.
+- 11:03 UTC — Green pods process 2,847 orders. New column populated correctly.
+- 11:05 UTC — Monitoring detects elevated error rate in green pods: a bug in the new pricing logic returns incorrect totals for bulk orders.
+- 11:06 UTC — Automated rollback triggered. Traffic shifted back to blue (v2.13.9).
+- 11:07 UTC — Rollback script reports "SUCCESS" — but blue pods running v2.13.9 code attempt to INSERT into `orders` table without the new `fulfillment_priority` column.
+- 11:08 UTC — All new orders from blue pods fail with `NOT NULL constraint violation`.
+- 11:10 UTC — Alerting fires: "order-service error rate > 30%."
+- 11:15 UTC — On-call engineer identifies the schema incompatibility.
+- 11:25 UTC — Hotfix: ALTER TABLE orders ALTER COLUMN fulfillment_priority SET DEFAULT 'standard'; ALTER TABLE orders ALTER COLUMN fulfillment_priority DROP NOT NULL;
+- 11:30 UTC — Blue pods (v2.13.9) resume processing orders successfully.
+- 11:38 UTC — Stuck orders re-processed. Full recovery confirmed.
+
+## Root Cause
+The deployment pipeline treats code rollback and database rollback as independent operations. The automated rollback script rolls back the application version (blue-green swap) but does NOT roll back database migrations. This is by design for forward-compatible migrations — but v2.14.0's migration was NOT forward-compatible: it added a NOT NULL column without a default value, making the old code unable to write to the table.
+
+The rollback script checked only that the blue pods were healthy (HTTP 200 on /health), not that they could actually write to the database. The health check passed because it only tests read operations.
+
+Contributing factors:
+1. No backward-compatibility check in the migration review process. The migration was approved without verifying that the previous version's code could still operate against the new schema.
+2. Rollback health check tested only GET /health (a read-only endpoint), not write operations.
+3. No "migration rollback" script was included with the deployment — the pipeline had no mechanism to reverse the schema change.
+4. The canary phase (10% traffic for 4 minutes) was too short to catch the pricing bug through automated tests — it was caught by a customer complaint forwarded to the on-call Slack channel.
+
+## Impact
+- 38 minutes of degraded order processing (new orders failed, existing orders unaffected).
+- 2,847 orders stuck in an unprocessable state for 30 minutes.
+- No data loss — all stuck orders were successfully re-processed after the schema hotfix.
+- Customer trust impact: 12 support tickets filed about "order stuck on processing."
+
+## Mitigation
+1. Added backward-compatibility lint check to the CI pipeline: new migrations must be verified against n-1 codebase before approval.
+2. Deployment rollback health check now includes a write-path smoke test (create and immediately delete a test record).
+3. All migrations must include a corresponding rollback script. Pipeline blocks if rollback script is missing.
+4. Extended canary phase from 4 minutes to 15 minutes with automated integration test suite running against canary traffic.
+5. Added a "schema compatibility" label to all PR reviews that touch migration files.
+
+## Lessons Learned
+- Blue-green deployments are not magic. If the database migration is not backward-compatible, rollback is broken by definition. Every migration must be reviewed for n-1 compatibility.
+- Health checks that only test reads give false confidence during rollbacks. Write-path verification is essential.
+- "Rollback succeeded" is a dangerous message if it only means "the old code is running." Success should mean "the old code is running AND functioning correctly against the current database state."
+- This incident would have been prevented by a single CI check. Process gaps are cheaper to fix than production incidents.

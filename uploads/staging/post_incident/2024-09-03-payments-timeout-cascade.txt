@@ -1,0 +1,50 @@
+# Incident: Payment Gateway Timeout Cascade
+Date: 2024-09-03
+Service: payments-service
+Severity: P1
+
+## Summary
+The payments-service suffered a 1 hour 12 minute outage when the external payment gateway (Stripe) experienced elevated latency (response times increased from 200ms to 8-12 seconds). The payments-service had no timeout configured on outbound HTTP calls to Stripe, causing threads to block indefinitely. This exhausted the application's thread pool and database connection pool simultaneously, creating a cascading failure that brought down all payment processing — including refunds and settlement, which do not depend on Stripe.
+
+## Timeline
+- 16:30 UTC — Stripe status page reports "elevated API latency" across their EU region.
+- 16:32 UTC — payments-service outbound calls to Stripe begin taking 8-12 seconds (normal: 200ms).
+- 16:35 UTC — Tomcat thread pool (max 200 threads) begins filling. Each thread blocks waiting for Stripe response.
+- 16:40 UTC — Thread pool exhausted. All endpoints on payments-service return 503 (including /refund and /settlement which don't call Stripe).
+- 16:42 UTC — Database connections held by blocked threads are not released. Connection pool exhaustion follows.
+- 16:45 UTC — Alerting fires: "payments-service 5xx rate > 90%."
+- 16:50 UTC — On-call engineer investigates. Thread dump shows 200/200 threads blocked on Stripe HTTP calls.
+- 17:00 UTC — Emergency fix deployed: add 3-second timeout to Stripe client. Kill all blocked threads.
+- 17:10 UTC — Stripe latency still elevated but payments-service now fails fast (returns "payment provider unavailable" to users).
+- 17:20 UTC — Refund and settlement endpoints recovered (no longer blocked by Stripe-related threads).
+- 17:42 UTC — Stripe latency returns to normal. Full service recovery.
+
+## Root Cause
+The payments-service used Apache HttpClient to call the Stripe API with NO explicit connection timeout or socket timeout configured. The default HttpClient behavior is to wait indefinitely. When Stripe's latency spiked, every in-flight request to Stripe held a thread and a database connection hostage until the operating system's TCP timeout killed the connection (default: ~120 seconds on Linux).
+
+This is the same resource exhaustion pattern as the 2024-03-15 DB pool exhaustion incident — different trigger (external dependency vs. network blip), identical failure mode (finite resource pool drained by blocked requests).
+
+Contributing factors:
+1. No timeout on outbound HTTP calls to any external provider.
+2. Stripe calls and internal endpoints shared the same thread pool — no bulkhead isolation.
+3. Database connections acquired before the Stripe call were held across the entire request lifecycle.
+4. No circuit breaker on the Stripe integration.
+
+## Impact
+- 1 hour 12 minutes of complete payment processing outage.
+- 8,432 failed payment attempts.
+- Refund processing blocked for 50 minutes (unnecessary — refunds don't need Stripe in real-time).
+- Estimated revenue impact: $520,000 in delayed transactions.
+
+## Mitigation
+1. Added explicit timeouts to all outbound HTTP clients: connection_timeout=2s, socket_timeout=5s.
+2. Implemented circuit breaker (Resilience4j) on Stripe client: open after 5 failures in 30 seconds.
+3. Isolated Stripe-calling endpoints into a dedicated thread pool (bulkhead pattern). Internal endpoints (refund, settlement) use a separate pool.
+4. Moved database connection acquisition to after the Stripe call returns (don't hold a DB connection while waiting on an external API).
+5. Added dependency health dashboard showing real-time latency for all external providers.
+
+## Lessons Learned
+- Every outbound HTTP call MUST have an explicit timeout. "No timeout" means "120-second timeout set by the OS," which is always wrong for user-facing services.
+- This is the SECOND time payments-service has been taken down by connection/thread pool exhaustion (see 2024-03-15). The pattern is clear: finite pools + unbounded wait = guaranteed outage. We are implementing a platform-wide "pool hygiene" checklist.
+- Bulkhead isolation is not optional for services that mix internal and external calls. One slow dependency should not take down unrelated functionality.
+- Circuit breakers should be the default integration pattern for any external API dependency.

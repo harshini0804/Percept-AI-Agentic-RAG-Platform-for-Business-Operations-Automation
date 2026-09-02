@@ -1,0 +1,52 @@
+# Incident: Auth Service Token Refresh Storm
+Date: 2024-05-22
+Service: auth-service
+Severity: P1
+
+## Summary
+A cascading failure originating in the auth-service caused a platform-wide outage lasting 1 hour and 23 minutes. The root cause was an infinite token refresh loop triggered by a clock skew between the auth-service pods and the token validation middleware in downstream services. Every API call across the platform failed authentication, resulting in a complete service disruption.
+
+## Timeline
+- 09:15 UTC — Kubernetes node auto-scaler provisions 3 new nodes in the auth-service pool.
+- 09:17 UTC — New pods start with system clocks 12 seconds ahead of existing pods (NTP sync delay on fresh nodes).
+- 09:18 UTC — Tokens issued by new pods have `iat` (issued-at) timestamps in the "future" relative to validation pods.
+- 09:20 UTC — Downstream services reject "future" tokens, triggering automatic token refresh in client SDKs.
+- 09:22 UTC — Token refresh requests flood auth-service. Each refresh also gets a "future" token → infinite loop.
+- 09:25 UTC — auth-service CPU hits 100%. Response latency exceeds 30 seconds.
+- 09:30 UTC — Circuit breakers trip across 14 downstream services. All API traffic halted.
+- 09:35 UTC — PagerDuty escalation. Auth team begins investigation.
+- 09:50 UTC — Root cause identified: clock skew on new nodes.
+- 10:05 UTC — Manual NTP sync forced on all auth-service nodes. Stale tokens begin expiring.
+- 10:20 UTC — Token cache cleared across all downstream services.
+- 10:38 UTC — Full platform recovery confirmed.
+
+## Root Cause
+The auth-service issues JWT tokens with short TTLs (5 minutes). The `iat` (issued-at) claim is compared against the local clock during validation. When new Kubernetes nodes joined the pool with clocks 12 seconds ahead, tokens appeared to be issued in the future, causing validators to reject them as invalid.
+
+The client SDK's retry-on-401 logic had no circuit breaker or retry cap — every rejection triggered an immediate re-authentication attempt, creating an amplification loop: reject → refresh → get another "future" token → reject → refresh → ...
+
+Contributing factors:
+1. No clock skew tolerance in JWT validation (standard recommendation: 30-second leeway).
+2. NTP sync on new nodes was configured as a background cron job (runs every 5 minutes) instead of a pre-start dependency.
+3. Client SDK retry-on-401 had no backoff or max-retry limit.
+4. No monitoring on clock drift across the Kubernetes cluster.
+
+## Impact
+- 83 minutes of platform-wide outage (all services behind auth).
+- 2.1 million failed API calls.
+- 156 enterprise API customers affected.
+- Estimated revenue impact: $890,000.
+- Triggered contractual SLA breach notifications for 12 customers.
+
+## Mitigation
+1. Added 30-second clock skew tolerance to all JWT validators.
+2. Changed NTP sync to a Kubernetes init container (runs before the pod starts serving traffic).
+3. Added max-retry limit (3) and exponential backoff to client SDK 401 retry logic.
+4. Deployed clock drift monitoring: alert if any node drifts > 5 seconds from the cluster median.
+5. Added auth-service canary deployment: new pods serve 5% traffic for 2 minutes before full rollout.
+
+## Lessons Learned
+- Time is a distributed systems dependency. Clock skew must be treated as a failure mode, not an edge case.
+- Token validation without clock tolerance is a ticking time bomb in any auto-scaling environment.
+- The retry storm pattern (also seen in the 2024-03-15 payments incident) is our #1 amplifier. We need a platform-wide retry policy standard, not per-service ad hoc configuration.
+- Init containers for infrastructure dependencies (NTP, DNS, config) should be a cluster-wide standard, not optional.

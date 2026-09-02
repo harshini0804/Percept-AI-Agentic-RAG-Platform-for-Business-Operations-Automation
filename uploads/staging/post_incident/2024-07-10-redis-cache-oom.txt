@@ -1,0 +1,46 @@
+# Incident: Redis Cache OOM Under Traffic Spike
+Date: 2024-07-10
+Service: catalog-service
+Severity: P2
+
+## Summary
+The catalog-service experienced degraded performance for 2 hours and 15 minutes when its Redis cache instance hit memory limits and began evicting keys aggressively. Product search latency increased from 45ms (p99) to 4.2 seconds, and cache hit rates dropped from 94% to 12%. The trigger was a flash sale event that was not communicated to the infrastructure team, causing a 6x spike in unique product lookups.
+
+## Timeline
+- 10:00 UTC — Flash sale launched on homepage. Marketing sent push notifications to 2M users.
+- 10:05 UTC — Unique product page views spike from 800/sec to 5,200/sec.
+- 10:08 UTC — Redis memory usage climbs from 3.2GB to 5.8GB (maxmemory set to 6GB).
+- 10:12 UTC — Redis triggers allkeys-lru eviction policy. Hot keys being evicted and immediately re-fetched.
+- 10:15 UTC — Cache hit rate drops below 20%. catalog-service falls back to PostgreSQL for every lookup.
+- 10:18 UTC — PostgreSQL connection pool for catalog-service saturates (max_connections=30).
+- 10:22 UTC — Alerting fires: "catalog-service p99 latency > 2000ms."
+- 10:35 UTC — On-call engineer identifies Redis OOM as root cause.
+- 10:45 UTC — Temporary fix: increase Redis maxmemory to 10GB on the fly.
+- 11:00 UTC — Cache begins warming. Hit rate slowly recovers.
+- 12:15 UTC — Cache hit rate back to 90%+. Latency normalized.
+
+## Root Cause
+The Redis instance serving catalog-service was sized for steady-state traffic (6GB maxmemory). The flash sale event caused a 6x spike in unique product SKU lookups, each caching a product detail object (~2KB). The total working set grew beyond the cache's capacity, triggering aggressive LRU eviction that created a cache thrashing loop: evict → miss → fetch from DB → cache → evict.
+
+Contributing factors:
+1. No communication channel between Marketing (flash sale scheduling) and Infrastructure (capacity planning).
+2. Redis maxmemory was statically configured, not auto-scaled based on traffic signals.
+3. No cache warming strategy for predictable high-traffic events.
+4. catalog-service had no graceful degradation — cache miss = full DB query, no stale-serve fallback.
+
+## Impact
+- 2 hours 15 minutes of degraded product search performance.
+- Estimated 34% drop in flash sale conversion rate during the degradation window.
+- No data loss. No complete outage — service was slow but not down.
+
+## Mitigation
+1. Increased baseline Redis maxmemory to 12GB. Added auto-scaling trigger at 70% memory utilization.
+2. Implemented stale-while-revalidate pattern: serve stale cached data while refreshing in background.
+3. Created a "high-traffic event" Slack channel where Marketing notifies Infra 48 hours before flash sales.
+4. Added cache warming job that pre-loads sale catalog items 1 hour before scheduled events.
+5. Added Redis memory utilization and eviction rate to the standard Grafana dashboard.
+
+## Lessons Learned
+- Cache sizing must account for peak traffic, not steady-state. If you can't predict peaks, you need auto-scaling.
+- Cross-team communication gaps are infrastructure risks. The flash sale playbook now includes an infrastructure checklist.
+- The cascade from cache miss → DB overload is the same resource exhaustion pattern as connection pool saturation (see 2024-03-15 payments incident). We need circuit breakers at every shared-resource boundary.

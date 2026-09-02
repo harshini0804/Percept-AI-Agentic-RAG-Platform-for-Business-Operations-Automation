@@ -128,6 +128,11 @@ def ingest_staging_folder(
     for file_path in sorted(folder.iterdir()):
         if not file_path.is_file():
             continue
+        if file_path.name.startswith("."):
+            # Skip dotfiles like .gitkeep — placeholders used to make
+            # Git track an otherwise-empty staging folder, not real
+            # content to ingest.
+            continue
 
         relative_path = str(file_path.relative_to(STAGING_ROOT))
 

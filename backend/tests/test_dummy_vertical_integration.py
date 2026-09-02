@@ -11,6 +11,7 @@ what was manually verified by hand, repeatedly, throughout this
 project's development.
 """
 
+import pytest
 from app.core.embeddings import upsert_embedding
 from app.verticals.dummy.graph import build_dummy_graph
 from app.core.orchestration import start_run
@@ -130,3 +131,111 @@ def test_dummy_vertical_malformed_llm_output_escalates_safely(monkeypatch):
 
     assert final_state["escalated"] is True
     assert final_state["confidence"] == 0.0
+
+
+# ---------------------------------------------------------------
+# Phase C: run_dummy_vertical (not just the graph directly) —
+# input_document_id resolution and runtime persistence (Section 6.4)
+# ---------------------------------------------------------------
+
+def test_run_dummy_vertical_resolves_input_document_id(monkeypatch):
+    from app.core.documents import create_document
+    from app.schemas.agent_contract import AgentRunInput, TriggerType
+    from app.verticals.dummy.graph import run_dummy_vertical
+
+    monkeypatch.setattr(
+        "app.core.orchestration.call_llm",
+        lambda messages, tools=None: _fake_llm_response(
+            confidence=0.9, should_act=True, reason="ok"
+        ),
+    )
+
+    document_id = create_document(
+        vertical="dummy",
+        filename="postmortem.txt",
+        raw_bytes=b"The database ran out of memory and crashed.",
+    )
+
+    agent_input = AgentRunInput(
+        vertical="dummy", trigger_type=TriggerType.UPLOAD, input_document_id=document_id
+    )
+    output = run_dummy_vertical(agent_input)
+
+    assert output.status == "completed"
+    assert output.confidence == pytest.approx(0.9)
+
+
+def test_run_dummy_vertical_persists_analyzed_text_into_kb(monkeypatch):
+    """
+    Section 6.4 runtime persistence: after a run finishes, the
+    analyzed text should be embedded and stored into the KB as
+    future precedent — retrievable by a subsequent run.
+    """
+    from app.core.db import get_connection
+    from app.schemas.agent_contract import AgentRunInput, TriggerType
+    from app.verticals.dummy.graph import run_dummy_vertical
+
+    monkeypatch.setattr(
+        "app.core.orchestration.call_llm",
+        lambda messages, tools=None: _fake_llm_response(
+            confidence=0.9, should_act=True, reason="ok"
+        ),
+    )
+
+    unique_marker = "zzqx_unique_marker_for_persistence_test"
+    agent_input = AgentRunInput(
+        vertical="dummy",
+        trigger_type=TriggerType.UPLOAD,
+        input_payload={"text": f"Some incident involving {unique_marker}."},
+    )
+    run_dummy_vertical(agent_input)
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT chunk_text FROM embeddings WHERE vertical = 'dummy' "
+                "AND chunk_text LIKE %s;",
+                (f"%{unique_marker}%",),
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    assert len(rows) == 1
+
+
+def test_run_dummy_vertical_persists_with_source_id_when_from_document(monkeypatch):
+    from app.core.db import get_connection
+    from app.core.documents import create_document
+    from app.schemas.agent_contract import AgentRunInput, TriggerType
+    from app.verticals.dummy.graph import run_dummy_vertical
+
+    monkeypatch.setattr(
+        "app.core.orchestration.call_llm",
+        lambda messages, tools=None: _fake_llm_response(
+            confidence=0.9, should_act=True, reason="ok"
+        ),
+    )
+
+    document_id = create_document(
+        vertical="dummy", filename="test.txt", raw_bytes=b"Unique document content xk92."
+    )
+    agent_input = AgentRunInput(
+        vertical="dummy", trigger_type=TriggerType.UPLOAD, input_document_id=document_id
+    )
+    run_dummy_vertical(agent_input)
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT source_id FROM embeddings WHERE vertical = 'dummy' "
+                "AND chunk_text LIKE '%xk92%';"
+            )
+            row = cur.fetchone()
+    finally:
+        conn.close()
+
+    assert row is not None
+    assert str(row["source_id"]) == document_id

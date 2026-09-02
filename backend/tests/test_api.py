@@ -271,6 +271,20 @@ def test_submit_run_unregistered_vertical_returns_404():
     assert response.status_code == 404
 
 
+def test_submit_run_valid_vertical_but_not_yet_built_returns_404():
+    """
+    Distinct from the above: 'post_incident' IS a real, valid
+    Vertical enum member (Section 4.3) but has no vertical.graph.py
+    registered yet since no real vertical has been built. This should
+    still 404, via a different code path (the registry lookup, not
+    enum validation) than a nonsense vertical name.
+    """
+    response = client.post(
+        "/agent-runs", json={"vertical": "post_incident", "input_text": "x"}
+    )
+    assert response.status_code == 404
+
+
 def test_submit_run_dummy_vertical_end_to_end(monkeypatch):
     """
     Needs network access to huggingface.co on first run in a fresh
@@ -300,3 +314,48 @@ def test_submit_run_dummy_vertical_end_to_end(monkeypatch):
     assert len(body["actions_taken"]) == 1
     assert body["actions_taken"][0]["action_name"] == "log_dummy_action"
     assert body["escalation_reason"] is None
+
+
+def test_submit_run_with_file_upload_end_to_end(monkeypatch):
+    """
+    Phase C: the file-upload variant. Needs network access to
+    huggingface.co on first run (same as the text-only submission
+    test above) — only call_llm is mocked.
+    """
+    monkeypatch.setattr(
+        "app.core.orchestration.call_llm",
+        lambda messages, tools=None: {
+            "content": '{"confidence": 0.93, "should_act": true, "reason": "test"}',
+            "tool_calls": [],
+        },
+    )
+
+    file_content = b"Summary: The server crashed due to a memory leak."
+    response = client.post(
+        "/agent-runs/upload",
+        data={"vertical": "dummy"},
+        files={"file": ("postmortem.txt", file_content, "text/plain")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["confidence"] == pytest.approx(0.93)
+
+
+def test_submit_run_with_file_upload_unregistered_vertical_returns_404():
+    response = client.post(
+        "/agent-runs/upload",
+        data={"vertical": "not_registered"},
+        files={"file": ("test.txt", b"some content", "text/plain")},
+    )
+    assert response.status_code == 404
+
+
+def test_submit_run_with_file_upload_unsupported_file_type_returns_400():
+    response = client.post(
+        "/agent-runs/upload",
+        data={"vertical": "dummy"},
+        files={"file": ("image.png", b"\x89PNG...", "image/png")},
+    )
+    assert response.status_code == 400

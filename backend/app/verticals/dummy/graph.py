@@ -17,6 +17,8 @@ from app.core.orchestration import (
     start_run,
 )
 from app.schemas.agent_contract import AgentRunInput, AgentRunOutput, build_agent_run_output
+from app.core.documents import resolve_document_text
+from app.core.embeddings import upsert_embedding
 
 # Ensure the dummy tool is registered (import triggers the decorator)
 import app.verticals.dummy.tools  # noqa: F401
@@ -75,16 +77,26 @@ def run_dummy_vertical(agent_input: AgentRunInput) -> AgentRunOutput:
     would kick off a run. Accepts an AgentRunInput and returns a
     validated AgentRunOutput directly (Section 3.2, 7.2).
 
-    Currently only supports input_payload={"text": ...} — resolving
-    input_document_id into text (for real file uploads) is Phase C
-    territory, not yet built.
+    Supports both input modes: input_document_id (resolved via
+    app.core.documents, Phase C) and input_payload={"text": ...}
+    (plain pasted text, unchanged since Phase B).
+
+    Runtime persistence (Section 6.4): after any run finishes —
+    completed or escalated — the analyzed text is embedded and
+    stored into the KB as future precedent, mirroring Section 8.1's
+    Vertical 1 workflow step 8. This is the reference pattern real
+    verticals (1, 3, 4 per Section 6.4's carve-out — not 2) should
+    follow in their own graphs.
     """
-    if agent_input.input_payload is None or "text" not in agent_input.input_payload:
+    if agent_input.input_document_id:
+        input_text = resolve_document_text(agent_input.input_document_id)
+    elif agent_input.input_payload and "text" in agent_input.input_payload:
+        input_text = agent_input.input_payload["text"]
+    else:
         raise ValueError(
-            "The dummy vertical currently only supports "
-            "input_payload={'text': ...}; input_document_id is not yet handled."
+            "The dummy vertical requires either input_document_id or "
+            "input_payload={'text': ...}."
         )
-    input_text = agent_input.input_payload["text"]
 
     run_id = start_run(
         vertical=agent_input.vertical,
@@ -102,6 +114,15 @@ def run_dummy_vertical(agent_input: AgentRunInput) -> AgentRunOutput:
 
     graph = build_dummy_graph()
     final_state = graph.invoke(initial_state)
+
+    # Runtime persistence — happens regardless of completed/escalated
+    # outcome, and regardless of which input mode was used.
+    upsert_embedding(
+        vertical=agent_input.vertical,
+        source_type="postmortem",
+        chunk_text=input_text,
+        source_id=agent_input.input_document_id,
+    )
 
     return build_agent_run_output(final_state)
 

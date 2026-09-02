@@ -12,9 +12,10 @@ check here, so a nonsense vertical name and a real-but-not-yet-built
 vertical both fail the same way, through the same code path.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from app.core.vertical_registry import run_vertical
+from app.core.documents import create_document
 from app.schemas.agent_contract import AgentRunInput, AgentRunOutput, TriggerType
 
 router = APIRouter(prefix="/agent-runs", tags=["agent-runs"])
@@ -42,5 +43,40 @@ def submit_run(body: SubmissionRequest):
 
     try:
         return run_vertical(body.vertical, agent_input)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/upload", response_model=AgentRunOutput)
+async def submit_run_with_file(vertical: str = Form(...), file: UploadFile = File(...)):
+    """
+    File-upload variant of submit_run — a separate endpoint rather
+    than a shared one, since FastAPI can't parse both a JSON body and
+    multipart/form-data on the same route. Extracts the file's text
+    immediately (Section 6's extraction logic, reused via
+    app.core.documents), creates its `documents` tracking row, and
+    passes input_document_id through the same shared contract as the
+    text-only path above.
+    """
+    raw_bytes = await file.read()
+
+    try:
+        document_id = create_document(
+            vertical=vertical,
+            filename=file.filename or "uploaded_file",
+            raw_bytes=raw_bytes,
+            source="upload",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    agent_input = AgentRunInput(
+        vertical=vertical,
+        trigger_type=TriggerType.UPLOAD,
+        input_document_id=document_id,
+    )
+
+    try:
+        return run_vertical(vertical, agent_input)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))

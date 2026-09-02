@@ -28,7 +28,7 @@ STAGING_ROOT = Path(os.getenv("STAGING_ROOT", "/app/uploads/staging"))
 # File-type text extraction (common — varies by extension, not vertical)
 # ---------------------------------------------------------------
 
-def _extract_text(file_path: Path) -> str:
+def extract_text(file_path: Path) -> str:
     suffix = file_path.suffix.lower()
 
     if suffix == ".txt":
@@ -139,7 +139,7 @@ def ingest_staging_folder(
                 summary["skipped"].append(relative_path)
                 continue
 
-            text = _extract_text(file_path)
+            text = extract_text(file_path)
             chunks = chunk_fn(text)
 
             for chunk in chunks:

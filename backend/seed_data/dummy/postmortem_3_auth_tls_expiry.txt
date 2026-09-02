@@ -1,0 +1,7 @@
+Summary: The authentication service rejected all login attempts for 22 minutes on July 2nd due to an expired internal TLS certificate.
+
+Root Cause: An internal TLS certificate used for service-to-service communication between the auth service and the user database expired without triggering a renewal, since the automated renewal job's alerting had been silently failing for weeks.
+
+Timeline: 03:11 - login failure rate spiked to 100 percent. 03:15 - on-call engineer paged. 03:28 - expired certificate identified as the cause. 03:33 - certificate manually renewed and service restored.
+
+Remediation: Manually renewed the certificate, fixed the renewal job's silent failure, and added a dedicated alert for certificates expiring within 14 days.

@@ -1,0 +1,7 @@
+Summary: The checkout service crashed repeatedly over a 2-hour window on September 3rd, causing intermittent failures for customers completing orders.
+
+Root Cause: A memory leak in the checkout service's caching layer caused gradual memory exhaustion under sustained traffic, eventually triggering out-of-memory kills of the service process.
+
+Timeline: 09:14 - first crash detected via container restart alerts. 09:40 - pattern of repeated crashes confirmed. 10:55 - memory leak identified in the response cache. 11:20 - hotfix deployed disabling the faulty cache layer.
+
+Remediation: Rolled back the caching layer change, added memory usage alerting with lower thresholds, and scheduled a proper fix for the cache eviction logic.

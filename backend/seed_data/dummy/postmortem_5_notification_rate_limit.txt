@@ -1,0 +1,7 @@
+Summary: The notification service failed to deliver approximately 30 percent of push notifications over a 3-hour period on November 8th.
+
+Root Cause: A third-party push notification provider began rate-limiting requests after the service's request volume exceeded the provider's plan limits following a recent increase in active users, and the service had no backoff or queuing logic to handle rate-limit responses gracefully.
+
+Timeline: 12:00 - delivery success rate began dropping. 13:45 - alert fired for delivery rate below threshold. 14:10 - rate limiting from the provider identified as the cause. 15:00 - request throttling added on our side to stay under the provider's limits.
+
+Remediation: Implemented client-side rate limiting and exponential backoff for the notification provider's API, and opened a request to the provider to increase our plan's limits.

@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchFormData } from "./client";
 
 export interface AgentRunSummary {
   id: string;
@@ -41,4 +41,10 @@ export function submitRun(vertical: string, inputText: string): Promise<Submissi
     method: "POST",
     body: JSON.stringify({ vertical, input_text: inputText }),
   });
+}
+export function submitRunWithFile(vertical: string, file: File): Promise<SubmissionResponse> {
+  const formData = new FormData();
+  formData.append("vertical", vertical);
+  formData.append("file", file);
+  return apiFetchFormData(`/agent-runs/upload`, formData);
 }

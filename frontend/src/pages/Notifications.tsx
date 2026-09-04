@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { ExternalLink } from "lucide-react";
 import { listNotifications, markNotificationRead } from "../api/notifications";
 
 function Notifications() {
@@ -44,7 +45,7 @@ function Notifications() {
         {notifications?.map((n) => (
           <div
             key={n.id}
-            className={`bg-white rounded shadow p-4 flex justify-between items-start ${
+            className={`bg-white rounded-xl shadow-md border border-slate-200 p-4 flex justify-between items-start ${
               n.read ? "opacity-60" : ""
             }`}
           >
@@ -55,8 +56,12 @@ function Notifications() {
                 <span className="text-xs text-slate-400">
                   {new Date(n.created_at).toLocaleString()}
                 </span>
-                <Link to={`/runs/${n.run_id}`} className="text-xs text-blue-600 hover:underline">
-                  View run
+                <Link
+                  to={`/runs/${n.run_id}`}
+                  title="View run"
+                  className="inline-flex text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-full p-1 transition-colors"
+                >
+                  <ExternalLink size={14} />
                 </Link>
               </div>
             </div>

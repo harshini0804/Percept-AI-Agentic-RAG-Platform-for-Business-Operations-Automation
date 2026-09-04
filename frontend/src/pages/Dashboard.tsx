@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { listAgentRuns } from "../api/agentRuns";
+import { ExternalLink } from "lucide-react";
+
 
 function Dashboard() {
   const { data: runs, isLoading, error } = useQuery({
@@ -70,9 +72,13 @@ function Dashboard() {
               </td>
               <td className="p-3">{run.confidence?.toFixed(2) ?? "—"}</td>
               <td className="p-3">{new Date(run.created_at).toLocaleString()}</td>
-              <td className="p-3">
-                <Link to={`/runs/${run.id}`} className="text-blue-600 hover:underline">
-                  View
+                            <td className="p-3">
+                <Link
+                  to={`/runs/${run.id}`}
+                  title="View run"
+                  className="inline-flex text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-full p-1.5 transition-colors"
+                >
+                  <ExternalLink size={16} />
                 </Link>
               </td>
             </tr>

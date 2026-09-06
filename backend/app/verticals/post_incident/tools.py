@@ -150,35 +150,38 @@ def get_incident_details(incident_id: str) -> dict:
                 "items": {"type": "string"},
                 "description": "UUIDs of historical incidents linked to this ticket.",
             },
+            "run_id": {
+                "type": "string",
+                "description": "UUID of the current agent run triggering this ticket.",
+            },
         },
         "required": ["title"],
     },
     tool_type="write",
 )
 def create_incident_ticket(
-    title: str, linked_incident_ids: list[str] | None = None
+    title: str,
+    linked_incident_ids: list[str] | None = None,
+    run_id: str | None = None,
 ) -> dict:
     conn = get_connection()
     try:
-        # We need the current run_id to link the ticket. Since tools
-        # don't receive run_id directly (the framework calls them with
-        # only the arguments dict), we store run_id on the ticket via
-        # the agent_runs context. The action_gate_node in orchestration
-        # passes tool args; we add the run_id to the ticket separately.
-        #
-        # For now, run_id comes from the caller via action_tool_args;
-        # it gets injected by the finalize_node when building the args.
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO incident_tickets (title, linked_incident_ids, status)
-                VALUES (%s, %s, %s)
+                INSERT INTO incident_tickets (run_id, title, linked_incident_ids, status)
+                VALUES (%s, %s, %s, %s)
                 RETURNING id;
                 """,
-                (title, linked_incident_ids or [], "open"),
+                (run_id, title, linked_incident_ids or [], "open"),
             )
             ticket_id = cur.fetchone()["id"]
         conn.commit()
-        return {"ticket_id": str(ticket_id), "title": title, "status": "open"}
+        return {
+            "ticket_id": str(ticket_id),
+            "title": title,
+            "status": "open",
+            "run_id": run_id,
+        }
     finally:
         conn.close()

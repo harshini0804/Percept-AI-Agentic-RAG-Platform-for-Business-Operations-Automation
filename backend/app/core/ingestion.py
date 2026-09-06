@@ -15,9 +15,6 @@ import hashlib
 from pathlib import Path
 from typing import Callable
 
-import pdfplumber
-from docx import Document as DocxDocument
-
 from app.core.db import get_connection
 from app.core.embeddings import upsert_embedding
 
@@ -35,6 +32,10 @@ def _extract_text(file_path: Path) -> str:
         return file_path.read_text(encoding="utf-8", errors="ignore")
 
     if suffix == ".pdf":
+        try:
+            import pdfplumber
+        except ImportError:
+            raise ImportError("pdfplumber is required to parse PDF files. Install with `pip install pdfplumber`.")
         text_parts = []
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
@@ -44,6 +45,10 @@ def _extract_text(file_path: Path) -> str:
         return "\n\n".join(text_parts)
 
     if suffix == ".docx":
+        try:
+            from docx import Document as DocxDocument
+        except ImportError:
+            raise ImportError("python-docx is required to parse DOCX files. Install with `pip install python-docx`.")
         doc = DocxDocument(file_path)
         return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
 

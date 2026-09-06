@@ -13,10 +13,22 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class Vertical(str, Enum):
+    """
+    Documents Section 4.3's canonical vertical names. NOT used to
+    validate AgentRunInput.vertical (see that field's comment) —
+    kept here as a single documented reference for the four real
+    vertical names, usable by anything that wants strict validation
+    later (e.g. a future /verticals metadata endpoint).
+    """
     POST_INCIDENT = "post_incident"
     INTERNAL_MOBILITY = "internal_mobility"
     CONTRACT_TRACKING = "contract_tracking"
     MEETING_ACTION_ITEMS = "meeting_action_items"
+    # Not a real vertical — the reference/test implementation
+    # (backend/app/verticals/dummy/) used to prove the shared core
+    # composes into a working end-to-end pipeline (Section 10, Phase
+    # 1 checkpoint).
+    DUMMY = "dummy"
 
 
 class TriggerType(str, Enum):
@@ -43,7 +55,14 @@ class ActionTaken(BaseModel):
 
 
 class AgentRunInput(BaseModel):
-    vertical: Vertical
+    # Deliberately a plain str, not the Vertical enum above — the
+    # single source of truth for "which verticals actually exist" is
+    # the vertical_registry (a KeyError there already produces the
+    # same 404 an enum ValidationError would), not a second,
+    # separately-maintained list here. Avoids every new vertical
+    # needing an update in agent_contract.py just to avoid a
+    # confusing validation error with no behavioral difference.
+    vertical: str
     trigger_type: TriggerType
     input_document_id: Optional[str] = None
     input_payload: Optional[dict[str, Any]] = None
@@ -62,6 +81,7 @@ class AgentRunInput(BaseModel):
 
 
 class AgentRunOutput(BaseModel):
+    run_id: str
     status: str  # e.g. "completed", "failed", "escalated"
     confidence: float = Field(ge=0.0, le=1.0)
     actions_taken: list[ActionTaken] = Field(default_factory=list)
@@ -75,3 +95,44 @@ class AgentRunOutput(BaseModel):
         if not self.escalated and self.escalation_reason:
             raise ValueError("escalation_reason must be null when escalated=False.")
         return self
+
+
+def build_agent_run_output(state: dict) -> AgentRunOutput:
+    """
+    Builds and validates an AgentRunOutput from a vertical's final
+    LangGraph state (the AgentState shape defined in
+    app/core/orchestration.py, per Section 3.3's pipeline).
+
+    This is the one place every vertical's graph should route its
+    final result through before returning it to the vertical
+    registry — satisfying Section 7.2's requirement that each
+    vertical "implement the shared agent contract" at the actual
+    boundary between a vertical's graph and the rest of the system,
+    while leaving the internal AgentState (embedding, retrieval
+    results, etc.) free to carry whatever intermediate working data
+    a vertical's graph needs.
+
+    Wraps AgentState's singular `action_taken` into the contract's
+    `actions_taken` list — every vertical built so far fires at most
+    one action per run, but the contract itself allows for more.
+    """
+    action_taken = state.get("action_taken")
+    actions_taken = (
+        [
+            ActionTaken(
+                action_name=action_taken["action_name"],
+                detail=action_taken.get("result"),
+            )
+        ]
+        if action_taken
+        else []
+    )
+
+    return AgentRunOutput(
+        run_id=state["run_id"],
+        status="escalated" if state["escalated"] else "completed",
+        confidence=state["confidence"],
+        actions_taken=actions_taken,
+        escalated=state["escalated"],
+        escalation_reason=state.get("escalation_reason"),
+    )

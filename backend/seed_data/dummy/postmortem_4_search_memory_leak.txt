@@ -1,0 +1,7 @@
+Summary: The search indexing service began crashing every few hours starting October 20th, degrading search result freshness for end users.
+
+Root Cause: A memory leak in the search service's in-memory index cache caused steadily increasing memory usage over time, eventually causing the process to be killed once it exceeded its memory limit.
+
+Timeline: Day 1, 16:00 - first unexpected restart observed. Day 2, 09:00 - restarts identified as a recurring pattern, roughly every 4 hours. Day 2, 14:30 - root cause traced to the index cache never evicting stale entries. Day 2, 16:00 - temporary fix deployed to periodically clear the cache.
+
+Remediation: Deployed a scheduled cache-clearing job as a stopgap, and filed a follow-up to implement proper LRU eviction in the index cache.

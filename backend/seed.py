@@ -2,17 +2,19 @@
 Database Seed Script (Section 9.2 Step 17)
 
 Populates the PostgreSQL relational tables and pgvector embeddings from
-committed synthetic postmortems in the staging folder.
+committed synthetic data across verticals.
 
 Usage:
     python seed.py
+    python seed.py --vertical all
+    python seed.py --vertical dummy
     python seed.py --vertical post_incident
 """
 
 import os
 import sys
+import shutil
 import argparse
-import hashlib
 from pathlib import Path
 
 # Ensure TF warnings and Protobuf collisions are suppressed
@@ -26,8 +28,19 @@ sys.path.insert(0, str(backend_dir))
 
 from app.core.db import get_connection
 from app.core.embeddings import upsert_embedding
-from app.core.ingestion import _compute_hash, _update_sync_state
+from app.core.ingestion import (
+    ingest_staging_folder,
+    STAGING_ROOT,
+    _compute_hash,
+    _update_sync_state,
+)
 from app.verticals.post_incident.chunker import section_chunker, _extract_header
+
+SEED_DATA_ROOT = Path(__file__).parent / "seed_data"
+
+VERTICALS_TO_SEED = [
+    {"vertical": "dummy", "source_type": "postmortem"},
+]
 
 
 def get_staging_root() -> Path:
@@ -44,10 +57,33 @@ def get_staging_root() -> Path:
         if c.resolve().exists():
             return c.resolve()
 
-    # Fallback to default
     default_path = (backend_dir / ".." / "uploads" / "staging").resolve()
     default_path.mkdir(parents=True, exist_ok=True)
     return default_path
+
+
+def seed_dummy_vertical(vertical: str, source_type: str) -> None:
+    source_dir = SEED_DATA_ROOT / vertical
+    target_dir = STAGING_ROOT / vertical
+
+    if not source_dir.exists():
+        print(f"  No seed data found for '{vertical}' at {source_dir}, skipping.")
+        return
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    copied = 0
+    for file in sorted(source_dir.iterdir()):
+        if file.is_file():
+            shutil.copy(file, target_dir / file.name)
+            copied += 1
+    print(f"  Copied {copied} file(s) into {target_dir}")
+
+    summary = ingest_staging_folder(vertical=vertical, source_type=source_type)
+    print(
+        f"  Ingested: processed={len(summary['processed'])}, "
+        f"skipped={len(summary['skipped'])}, errors={summary['errors']}"
+    )
 
 
 def parse_postmortem_metadata(text: str, filename: str) -> dict:
@@ -109,7 +145,6 @@ def seed_post_incident(staging_root: Path) -> dict:
                 content_hash = _compute_hash(file_path)
 
                 with conn.cursor() as cur:
-                    # Check if incident exists with this title
                     cur.execute(
                         "SELECT id FROM incidents WHERE title = %s LIMIT 1;",
                         (meta["title"],),
@@ -171,7 +206,7 @@ def main():
     parser.add_argument(
         "--vertical",
         default="all",
-        choices=["all", "post_incident"],
+        choices=["all", "dummy", "post_incident"],
         help="Vertical to seed (default: all)",
     )
     args = parser.parse_args()
@@ -179,8 +214,13 @@ def main():
     staging_root = get_staging_root()
     print(f"=== Seeding Knowledge Base (Staging Root: {staging_root}) ===\n")
 
+    if args.vertical in ("all", "dummy"):
+        print("[Vertical: Dummy]")
+        for entry in VERTICALS_TO_SEED:
+            seed_dummy_vertical(entry["vertical"], entry["source_type"])
+
     if args.vertical in ("all", "post_incident"):
-        print("[Vertical 1: Post-Incident Knowledge Synthesis]")
+        print("\n[Vertical 1: Post-Incident Knowledge Synthesis]")
         res = seed_post_incident(staging_root)
         print(f"Summary: {res['inserted_incidents']} incidents inserted, {res['embedded_chunks']} chunks embedded.")
         if res["errors"]:

@@ -1,0 +1,7 @@
+Summary: The payment service experienced a 45-minute outage on August 15th during a promotional sale event.
+
+Root Cause: A database connection pool was exhausted due to a slow query that held connections open longer than expected, combined with a traffic spike during the promotion.
+
+Timeline: 14:02 - alerts fired for elevated error rates. 14:10 - on-call engineer paged. 14:35 - root cause identified as connection pool exhaustion. 14:47 - fix deployed and service recovered.
+
+Remediation: Added connection pool monitoring alerts, reduced the slow query's timeout, and added a circuit breaker for the payment service to prevent cascading failures.

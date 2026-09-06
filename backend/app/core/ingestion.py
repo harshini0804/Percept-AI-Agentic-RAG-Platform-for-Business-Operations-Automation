@@ -25,7 +25,7 @@ STAGING_ROOT = Path(os.getenv("STAGING_ROOT", "/app/uploads/staging"))
 # File-type text extraction (common — varies by extension, not vertical)
 # ---------------------------------------------------------------
 
-def _extract_text(file_path: Path) -> str:
+def extract_text(file_path: Path) -> str:
     suffix = file_path.suffix.lower()
 
     if suffix == ".txt":
@@ -133,6 +133,11 @@ def ingest_staging_folder(
     for file_path in sorted(folder.iterdir()):
         if not file_path.is_file():
             continue
+        if file_path.name.startswith("."):
+            # Skip dotfiles like .gitkeep — placeholders used to make
+            # Git track an otherwise-empty staging folder, not real
+            # content to ingest.
+            continue
 
         relative_path = str(file_path.relative_to(STAGING_ROOT))
 
@@ -144,7 +149,7 @@ def ingest_staging_folder(
                 summary["skipped"].append(relative_path)
                 continue
 
-            text = _extract_text(file_path)
+            text = extract_text(file_path)
             chunks = chunk_fn(text)
 
             for chunk in chunks:

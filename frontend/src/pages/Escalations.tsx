@@ -1,13 +1,40 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { ExternalLink } from "lucide-react";
 import { listEscalations, resolveEscalation } from "../api/escalations";
 
+// Mirrors the four real verticals (Section 4.3) plus the dummy
+// reference vertical — kept as a simple constant here since the
+// backend doesn't (deliberately, per the agent contract's design)
+// expose a canonical vertical list endpoint.
+const VERTICAL_OPTIONS = [
+  { value: "", label: "All verticals" },
+  { value: "dummy", label: "Dummy" },
+  { value: "post_incident", label: "Post-Incident" },
+  { value: "internal_mobility", label: "Internal Mobility" },
+  { value: "contract_tracking", label: "Contract Tracking" },
+  { value: "meeting_action_items", label: "Meeting Action Items" },
+];
+
+function daysElapsed(createdAt: string): string {
+  const created = new Date(createdAt).getTime();
+  const now = Date.now();
+  const diffMs = now - created;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "today";
+  if (diffDays === 1) return "1 day ago";
+  return `${diffDays} days ago`;
+}
+
 function Escalations() {
+  const [vertical, setVertical] = useState("");
   const queryClient = useQueryClient();
 
   const { data: escalations, isLoading, error } = useQuery({
-    queryKey: ["escalations"],
-    queryFn: () => listEscalations(),
+    queryKey: ["escalations", vertical],
+    queryFn: () => listEscalations(vertical || undefined),
   });
 
   const mutation = useMutation({
@@ -24,7 +51,20 @@ function Escalations() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-4">Escalation Queue</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold">Escalation Queue</h2>
+        <select
+          value={vertical}
+          onChange={(e) => setVertical(e.target.value)}
+          className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white"
+        >
+          {VERTICAL_OPTIONS.map((v) => (
+            <option key={v.value} value={v.value}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {escalations?.length === 0 && (
         <p className="text-slate-500">No open escalations. Nothing needs review right now.</p>
@@ -32,14 +72,30 @@ function Escalations() {
 
       <div className="flex flex-col gap-4">
         {escalations?.map((esc) => (
-          <div key={esc.id} className="bg-white rounded shadow p-5">
+          <div
+            key={esc.id}
+            className="bg-white rounded-xl shadow-md border border-slate-200 p-5"
+          >
             <div className="flex justify-between items-start mb-2">
               <div>
-                <span className="text-xs uppercase tracking-wide text-slate-400">{esc.vertical}</span>
+                <span className="text-xs uppercase tracking-wide text-slate-400">
+                  {esc.vertical}
+                </span>
                 <p className="text-sm text-slate-700 mt-1">{esc.reason}</p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-xs text-slate-400">
+                    {new Date(esc.created_at).toLocaleString()}
+                  </span>
+                  <span className="text-xs text-slate-300">·</span>
+                  <span className="text-xs text-slate-400">{daysElapsed(esc.created_at)}</span>
+                </div>
               </div>
-              <Link to={`/runs/${esc.run_id}`} className="text-blue-600 hover:underline text-sm">
-                View run
+              <Link
+                to={`/runs/${esc.run_id}`}
+                title="View run"
+                className="text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-full p-1.5 transition-colors"
+              >
+                <ExternalLink size={16} />
               </Link>
             </div>
 
@@ -55,14 +111,14 @@ function Escalations() {
               <button
                 onClick={() => mutation.mutate({ id: esc.id, approve: true })}
                 disabled={mutation.isPending || !esc.pending_action}
-                className="bg-green-600 text-white text-sm px-3 py-1.5 rounded disabled:opacity-50"
+                className="bg-green-600 text-white text-sm px-3 py-1.5 rounded-lg disabled:opacity-50"
               >
                 Approve
               </button>
               <button
                 onClick={() => mutation.mutate({ id: esc.id, approve: false })}
                 disabled={mutation.isPending}
-                className="bg-red-100 text-red-700 text-sm px-3 py-1.5 rounded disabled:opacity-50"
+                className="bg-red-100 text-red-700 text-sm px-3 py-1.5 rounded-lg disabled:opacity-50"
               >
                 Reject
               </button>

@@ -62,7 +62,10 @@ def get_staging_root() -> Path:
     return default_path
 
 
-def seed_dummy_vertical(vertical: str, source_type: str) -> None:
+STAGING_ROOT = get_staging_root()
+
+
+def seed_vertical(vertical: str, source_type: str) -> None:
     source_dir = SEED_DATA_ROOT / vertical
     target_dir = STAGING_ROOT / vertical
 
@@ -217,7 +220,7 @@ def main():
     if args.vertical in ("all", "dummy"):
         print("[Vertical: Dummy]")
         for entry in VERTICALS_TO_SEED:
-            seed_dummy_vertical(entry["vertical"], entry["source_type"])
+            seed_vertical(entry["vertical"], entry["source_type"])
 
     if args.vertical in ("all", "post_incident"):
         print("\n[Vertical 1: Post-Incident Knowledge Synthesis]")

@@ -282,14 +282,14 @@ def test_submit_run_unregistered_vertical_returns_404():
 
 def test_submit_run_valid_vertical_but_not_yet_built_returns_404():
     """
-    Distinct from the above: 'post_incident' IS a real, valid
+    Distinct from the above: 'internal_mobility' IS a real, valid
     Vertical enum member (Section 4.3) but has no vertical.graph.py
-    registered yet since no real vertical has been built. This should
+    registered yet since that vertical has not been built yet. This should
     still 404, via a different code path (the registry lookup, not
     enum validation) than a nonsense vertical name.
     """
     response = client.post(
-        "/agent-runs", json={"vertical": "post_incident", "input_text": "x"}
+        "/agent-runs", json={"vertical": "internal_mobility", "input_text": "x"}
     )
     assert response.status_code == 404
 

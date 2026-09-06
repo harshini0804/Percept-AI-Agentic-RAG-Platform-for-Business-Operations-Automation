@@ -41,6 +41,8 @@ from app.core.orchestration import (
     action_gate_node,
     start_run,
 )
+from app.schemas.agent_contract import AgentRunInput, AgentRunOutput, build_agent_run_output
+from app.core.documents import resolve_document_text
 from app.core.retrieval import search_with_retry
 from app.core.llm_gateway import call_llm
 from app.core.logging_service import log_decision
@@ -326,16 +328,41 @@ def build_post_incident_graph():
 # Entry point
 # -------------------------------------------------------------------
 
-def run_post_incident(input_text: str) -> AgentState:
+def run_post_incident(agent_input: AgentRunInput | str) -> AgentRunOutput:
     """
     Entry point called by the vertical registry when a user submits
     to the post_incident vertical via POST /agent-runs.
     """
-    run_id = start_run(vertical="post_incident", trigger_type="upload")
+    if isinstance(agent_input, str):
+        input_text = agent_input
+        vertical_name = "post_incident"
+        trigger_type = "upload"
+    else:
+        vertical_name = (
+            agent_input.vertical.value
+            if hasattr(agent_input.vertical, "value")
+            else str(agent_input.vertical)
+        )
+        trigger_type = (
+            agent_input.trigger_type.value
+            if hasattr(agent_input.trigger_type, "value")
+            else str(agent_input.trigger_type)
+        )
+        if agent_input.input_document_id:
+            input_text = resolve_document_text(agent_input.input_document_id)
+        elif agent_input.input_payload and "text" in agent_input.input_payload:
+            input_text = agent_input.input_payload["text"]
+        else:
+            raise ValueError(
+                "The post_incident vertical requires either input_document_id or "
+                "input_payload={'text': ...}."
+            )
+
+    run_id = start_run(vertical=vertical_name, trigger_type=trigger_type)
 
     initial_state: AgentState = {
         "run_id": run_id,
-        "vertical": "post_incident",
+        "vertical": vertical_name,
         "source_type": "postmortem",
         "input_text": input_text,
         "system_prompt": POST_INCIDENT_SYSTEM_PROMPT,
@@ -344,7 +371,7 @@ def run_post_incident(input_text: str) -> AgentState:
 
     graph = build_post_incident_graph()
     final_state = graph.invoke(initial_state)
-    return final_state
+    return build_agent_run_output(final_state)
 
 
 # -------------------------------------------------------------------

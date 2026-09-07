@@ -11,6 +11,8 @@ from app.core.ingestion import ingest_staging_folder
 
 import app.verticals.dummy.tools
 import app.verticals.dummy.graph
+import app.verticals.meeting_action_items.tools
+import app.verticals.meeting_action_items.graph
 
 # Section 6.3: "A shared function, called on a timer via APScheduler,
 # scans each vertical's staging folder..." Interval is configurable

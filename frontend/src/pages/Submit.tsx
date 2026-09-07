@@ -12,6 +12,7 @@ import { submitRun, submitRunWithFile } from "../api/agentRuns";
 // shell.
 const AVAILABLE_VERTICALS = [
   { value: "dummy", label: "Dummy (test vertical)" },
+  { value: "meeting_action_items", label: "Meeting Action Items" },
 ];
 
 function Submit() {

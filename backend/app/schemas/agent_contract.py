@@ -164,7 +164,18 @@ def build_agent_run_output(state: dict) -> AgentRunOutput:
     any_escalated = bool(state.get("escalated")) or bool(state.get("escalations"))
 
     if not reasons:
-        escalation_reason = None
+        # any_escalated can be True (a non-empty `escalations` list,
+        # or `escalated=True`) even when NOT ONE item actually
+        # carried a "reason" — e.g. state["escalations"] = [{}] or
+        # [{"reason": ""}]. AgentRunOutput's own validator requires
+        # escalation_reason whenever escalated=True, so leaving this
+        # None here would raise an unhandled ValidationError instead
+        # of failing gracefully. Default to a generic reason rather
+        # than silently downgrading any_escalated to False — a
+        # reasonless escalation is still an escalation and still
+        # belongs in front of a human, just with weaker context on
+        # why.
+        escalation_reason = "Escalated (no reason provided)." if any_escalated else None
     elif len(reasons) == 1:
         escalation_reason = reasons[0]
     else:

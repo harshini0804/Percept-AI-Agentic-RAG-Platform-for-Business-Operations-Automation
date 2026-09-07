@@ -48,6 +48,7 @@ class ResolveEscalationRequest(BaseModel):
 class NotificationSummary(BaseModel):
     id: str
     run_id: str
+    vertical: str
     recipient: str
     message: str
     read: bool

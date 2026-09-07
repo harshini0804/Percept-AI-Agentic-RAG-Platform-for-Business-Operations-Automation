@@ -4,13 +4,27 @@ import { Link } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
 import { listNotifications, markNotificationRead } from "../api/notifications";
 
+// Mirrors the four real verticals (Section 4.3) plus the dummy
+// reference vertical — same constant used in Escalations.tsx, kept
+// here too since the backend doesn't expose a canonical vertical
+// list endpoint.
+const VERTICAL_OPTIONS = [
+  { value: "", label: "All verticals" },
+  { value: "dummy", label: "Dummy" },
+  { value: "post_incident", label: "Post-Incident" },
+  { value: "internal_mobility", label: "Internal Mobility" },
+  { value: "contract_tracking", label: "Contract Tracking" },
+  { value: "meeting_action_items", label: "Meeting Action Items" },
+];
+
 function Notifications() {
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [vertical, setVertical] = useState("");
   const queryClient = useQueryClient();
 
   const { data: notifications, isLoading, error } = useQuery({
-    queryKey: ["notifications", unreadOnly],
-    queryFn: () => listNotifications(unreadOnly),
+    queryKey: ["notifications", unreadOnly, vertical],
+    queryFn: () => listNotifications(unreadOnly, vertical || undefined),
   });
 
   const mutation = useMutation({
@@ -27,14 +41,27 @@ function Notifications() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold">Notifications</h2>
-        <label className="flex items-center gap-2 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            checked={unreadOnly}
-            onChange={(e) => setUnreadOnly(e.target.checked)}
-          />
-          Unread only
-        </label>
+        <div className="flex items-center gap-4">
+          <select
+            value={vertical}
+            onChange={(e) => setVertical(e.target.value)}
+            className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white"
+          >
+            {VERTICAL_OPTIONS.map((v) => (
+              <option key={v.value} value={v.value}>
+                {v.label}
+              </option>
+            ))}
+          </select>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              checked={unreadOnly}
+              onChange={(e) => setUnreadOnly(e.target.checked)}
+            />
+            Unread only
+          </label>
+        </div>
       </div>
 
       {notifications?.length === 0 && (
@@ -50,7 +77,10 @@ function Notifications() {
             }`}
           >
             <div>
-              <p className="text-sm text-slate-500">{n.recipient}</p>
+              <span className="text-xs uppercase tracking-wide text-slate-400">
+                {n.vertical}
+              </span>
+              <p className="text-sm text-slate-500 mt-0.5">{n.recipient}</p>
               <p className="text-sm">{n.message}</p>
               <div className="flex gap-2 items-center mt-1">
                 <span className="text-xs text-slate-400">

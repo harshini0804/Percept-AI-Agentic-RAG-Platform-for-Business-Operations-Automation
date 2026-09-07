@@ -213,13 +213,28 @@ def test_list_and_mark_read_notification():
 
     unread_response = client.get("/notifications?unread_only=true")
     assert len(unread_response.json()) == 1
+    assert unread_response.json()[0]["vertical"] == "dummy"
 
     mark_response = client.post(f"/notifications/{notification_id}/mark-read")
     assert mark_response.status_code == 200
     assert mark_response.json()["read"] is True
+    assert mark_response.json()["vertical"] == "dummy"
 
     unread_after = client.get("/notifications?unread_only=true")
     assert len(unread_after.json()) == 0
+
+
+def test_list_notifications_filters_by_vertical():
+    dummy_run = create_agent_run(vertical="dummy", trigger_type="upload")
+    other_run = create_agent_run(vertical="meeting_action_items", trigger_type="upload")
+    create_notification(dummy_run, recipient="a@example.com", message="dummy notice")
+    create_notification(other_run, recipient="b@example.com", message="v4 notice")
+
+    response = client.get("/notifications?vertical=meeting_action_items")
+    results = response.json()
+    assert len(results) == 1
+    assert results[0]["vertical"] == "meeting_action_items"
+    assert results[0]["message"] == "v4 notice"
 
 
 def test_mark_read_nonexistent_notification_returns_404():

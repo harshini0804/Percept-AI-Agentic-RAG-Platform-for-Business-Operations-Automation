@@ -1,0 +1,12 @@
+Priya Menon — Frontend Lead | Engineering | Bangalore
+
+Priya leads the frontend team of 4, managing the React/TypeScript codebase and design system. She rebuilt the customer dashboard from a legacy jQuery app to a modern React + TanStack Query architecture, improving initial load time by 40% and reducing customer-reported UI bugs by 35%. She is the team's accessibility champion and implemented the WCAG 2.1 AA compliance pass for the checkout flow.
+
+Key contributions:
+- Rebuilt the customer dashboard from jQuery to React + TanStack Query (2024 Q3).
+- Implemented the shared design system component library (Tailwind + Radix UI).
+- Led WCAG 2.1 AA accessibility audit and remediation for checkout.
+- On-call for frontend; authored monitoring dashboards for client-side error rates.
+
+Priya's core skills: React, TypeScript, Tailwind CSS, Node.js, accessibility.
+Location: Bangalore.

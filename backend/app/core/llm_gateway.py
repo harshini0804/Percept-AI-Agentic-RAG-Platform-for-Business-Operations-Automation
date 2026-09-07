@@ -91,6 +91,7 @@ def call_llm(
     if message.tool_calls:
         for tc in message.tool_calls:
             tool_calls.append({
+                "id": getattr(tc, "id", None),
                 "name": tc.function.name,
                 "arguments": json.loads(tc.function.arguments),
             })

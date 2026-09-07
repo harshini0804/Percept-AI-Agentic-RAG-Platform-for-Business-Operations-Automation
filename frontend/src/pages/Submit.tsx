@@ -4,14 +4,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Paperclip, X, ArrowUp, FileText } from "lucide-react";
 import { submitRun, submitRunWithFile } from "../api/agentRuns";
 
-// Only "dummy" is registered on the backend right now. As real
-// verticals get built and registered (Section 7, point 11), add
-// their names here — this is the "parametrized per vertical"
-// selector Section 5 describes; vertical-specific input fields
-// (beyond text/file) get added per vertical later, reusing this
-// shell.
+// Registered verticals (Section 7, point 11): "dummy" proves the shared
+// core, and internal_mobility (Vertical 2, Section 8.2) matches employee
+// profiles to a posted role with a ranked leaderboard on the result page.
 const AVAILABLE_VERTICALS = [
   { value: "dummy", label: "Dummy (test vertical)" },
+  { value: "internal_mobility", label: "Internal Mobility & Skill-Gap Matching" },
   { value: "meeting_action_items", label: "Meeting Action Items" },
 ];
 

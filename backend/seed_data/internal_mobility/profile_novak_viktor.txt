@@ -1,0 +1,12 @@
+Viktor Novak — Staff Platform Engineer | Engineering | Berlin
+
+Viktor is a staff engineer with 9 years of experience, 5 at the company. He owns the Kubernetes cluster infrastructure, the Terraform IaC repository, and the shared CI/CD pipelines. Viktor led the multi-region failover rollout that cut regional outage impact from 12 minutes to under 90 seconds. He is the most senior engineer in the Berlin office and regularly reviews architectural RFCs across teams.
+
+Key contributions:
+- Designed the multi-region Kubernetes failover architecture (2024).
+- Built the shared Terraform module library used by all backend services.
+- Led the container security hardening initiative, reducing the CVE surface by 60%.
+- Runs the monthly Platform Engineering brown-bag session.
+
+Viktor's core skills: Kubernetes, Terraform, Go, Python, observability, SRE.
+Location: Berlin.

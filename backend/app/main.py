@@ -11,6 +11,8 @@ from app.core.ingestion import ingest_staging_folder
 
 import app.verticals.dummy.tools
 import app.verticals.dummy.graph
+import app.verticals.internal_mobility.tools
+import app.verticals.internal_mobility.graph
 import app.verticals.meeting_action_items.tools
 import app.verticals.meeting_action_items.graph
 

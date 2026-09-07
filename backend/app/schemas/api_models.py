@@ -27,6 +27,9 @@ class AgentDecisionDetail(BaseModel):
 
 class AgentRunDetail(AgentRunSummary):
     decisions: list[AgentDecisionDetail]
+    # Vertical 2 (internal_mobility, Section 8.2): the ranked candidate
+    # leaderboard for this run. Empty for non-internal-mobility runs.
+    role_matches: list["RoleMatchSummary"] = []
 
 
 class EscalationSummary(BaseModel):
@@ -53,3 +56,20 @@ class NotificationSummary(BaseModel):
     message: str
     read: bool
     created_at: datetime
+
+
+class RoleMatchSummary(BaseModel):
+    """One ranked internal candidate for a role (Vertical 2, Section 8.2),
+    joined with the employee's name/department and the dynamic capacity
+    badge from employee_workload."""
+    id: str
+    rank: int
+    employee_name: Optional[str] = None
+    department: Optional[str] = None
+    rationale: str
+    confidence: float
+    notified: bool
+    utilization_pct: Optional[int] = None
+
+
+AgentRunDetail.model_rebuild()

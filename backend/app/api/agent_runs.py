@@ -5,7 +5,7 @@ Report/Result viewer shared UI screens (Section 5).
 
 from fastapi import APIRouter, HTTPException, Query
 from app.core.db import get_connection
-from app.schemas.api_models import AgentRunSummary, AgentRunDetail, AgentDecisionDetail
+from app.schemas.api_models import AgentRunSummary, AgentRunDetail, AgentDecisionDetail, RoleMatchSummary
 
 router = APIRouter(prefix="/agent-runs", tags=["agent-runs"])
 
@@ -70,9 +70,34 @@ def get_agent_run(run_id: str):
             )
             decisions = cur.fetchall()
 
+            # Vertical 2 (Section 8.2): the ranked candidate leaderboard.
+            # Left-joined with employee_workload so the availability badge
+            # is surfaced live. Always empty for non-internal-mobility runs.
+            cur.execute(
+                """
+                SELECT
+                    rm.id,
+                    rm.rank,
+                    e.name AS employee_name,
+                    e.department,
+                    rm.rationale,
+                    rm.confidence,
+                    rm.notified,
+                    ew.utilization_pct
+                FROM role_matches rm
+                JOIN employees e ON e.id = rm.employee_id
+                LEFT JOIN employee_workload ew ON ew.employee_id = e.id
+                WHERE rm.run_id = %s
+                ORDER BY rm.rank ASC;
+                """,
+                (run_id,),
+            )
+            role_matches = [RoleMatchSummary(**d) for d in cur.fetchall()]
+
             return AgentRunDetail(
                 **run,
                 decisions=[AgentDecisionDetail(**d) for d in decisions],
+                role_matches=role_matches,
             )
     finally:
         conn.close()

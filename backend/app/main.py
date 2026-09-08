@@ -16,6 +16,7 @@ import app.verticals.meeting_action_items.graph
 
 import app.verticals.contract_tracking.tools
 import app.verticals.contract_tracking.graph
+from app.verticals.contract_tracking.scheduler import run_scheduled_contract_ingestion
 
 # Section 6.3: "A shared function, called on a timer via APScheduler,
 # scans each vertical's staging folder..." Interval is configurable
@@ -38,18 +39,33 @@ def run_scheduled_ingestion() -> None:
 
     Only "dummy" is excluded here (not a real vertical with real
     scheduled ingestion needs, per its own docstrings elsewhere) —
-    every real vertical listed in VERTICAL_SOURCE_TYPES is scanned.
+    every real vertical listed in VERTICAL_SOURCE_TYPES is scanned,
+    EXCEPT "contract_tracking" (Section 6.4's one deliberate
+    exception): its scheduled ingestion IS the analysis trigger, so
+    it needs clause-level chunking + the full extraction workflow,
+    not the generic embed-only path every other vertical uses here.
+    See app.verticals.contract_tracking.scheduler for why it can't
+    just reuse ingest_staging_folder with a different chunk_fn.
 
     Failures for one vertical are caught and logged, not allowed to
     stop the other verticals' ingestion in the same run.
     """
     for vertical, source_type in VERTICAL_SOURCE_TYPES.items():
+        if vertical == "contract_tracking":
+            continue
         try:
             summary = ingest_staging_folder(vertical=vertical, source_type=source_type)
             if summary["processed"] or summary["errors"]:
                 print(f"[scheduled ingestion] {vertical}: {summary}")
         except Exception as e:
             print(f"[scheduled ingestion] ERROR for vertical '{vertical}': {e}")
+
+    try:
+        summary = run_scheduled_contract_ingestion()
+        if summary["processed"] or summary["errors"]:
+            print(f"[scheduled ingestion] contract_tracking: {summary}")
+    except Exception as e:
+        print(f"[scheduled ingestion] ERROR for vertical 'contract_tracking': {e}")
 
 
 @asynccontextmanager

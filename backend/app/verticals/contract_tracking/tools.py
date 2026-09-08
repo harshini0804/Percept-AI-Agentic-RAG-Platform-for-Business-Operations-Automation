@@ -61,23 +61,41 @@ from app.core.logging_service import create_escalation
     tool_type="read",
 )
 def get_surrounding_clauses(contract_id: str, clause_number: str) -> dict:
-    results = search_embeddings(
-        query_text="",  # unused for a direct lookup; similarity ordering is irrelevant here
-        vertical="contract_tracking",
-        source_type="contract_clause",
-        top_k=1,
-        extra_filter_sql="AND source_id = %s AND metadata->>'clause_number' = %s",
-        extra_filter_params=(contract_id, clause_number),
-    )
-    if not results:
+    # A direct lookup by exact (contract_id, clause_number), not a
+    # similarity search (Section 8.3: "a direct lookup of a specific
+    # referenced section... not a similarity search"). Queries the
+    # embeddings table directly rather than going through
+    # search_embeddings, which always computes and ORDERs BY a query
+    # embedding — including embedding an empty string when it's fed
+    # one, which is a needless, potentially unstable operation for a
+    # lookup that the WHERE clause alone already answers exactly.
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT chunk_text, metadata
+                FROM embeddings
+                WHERE vertical = 'contract_tracking'
+                  AND source_type = 'contract_clause'
+                  AND source_id = %s
+                  AND metadata->>'clause_number' = %s
+                LIMIT 1;
+                """,
+                (contract_id, clause_number),
+            )
+            row = cur.fetchone()
+    finally:
+        conn.close()
+
+    if row is None:
         return {"found": False, "clause_number": clause_number, "text": None}
 
-    match = results[0]
     return {
         "found": True,
         "clause_number": clause_number,
-        "title": (match["metadata"] or {}).get("title", ""),
-        "text": match["chunk_text"],
+        "title": (row["metadata"] or {}).get("title", ""),
+        "text": row["chunk_text"],
     }
 
 

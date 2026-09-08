@@ -24,3 +24,18 @@ Rules:
 - "description" should be a short, concrete summary of the task, not
   a verbatim quote of the whole discussion around it.
 """
+
+FOLLOWUP_VERDICT_PROMPT = """You are checking whether a previously assigned action item has been completed, based on evidence of the owner's recent activity (tickets, commits, follow-up mentions).
+
+Given the action item's description and any related activity evidence found, respond ONLY with strict JSON in this exact shape, no other text:
+{"verdict": "done" | "in_progress" | "no_evidence", "confidence": <float 0.0-1.0>}
+
+Rules:
+- "done": the evidence clearly shows this specific task was completed.
+- "in_progress": there is some related activity, but it does not
+  clearly show the task is finished.
+- "no_evidence": no related activity was found, or what was found is
+  unrelated to this specific task.
+- Base your verdict only on the evidence given — do not assume
+  completion just because time has passed.
+"""

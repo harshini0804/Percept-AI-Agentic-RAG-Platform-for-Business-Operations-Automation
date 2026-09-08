@@ -8,6 +8,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from app.api import agent_runs, escalations, notifications, admin, evaluation, submissions
 from app.api.admin import VERTICAL_SOURCE_TYPES
 from app.core.ingestion import ingest_staging_folder
+from app.verticals.meeting_action_items.followup import run_followup_check
 
 import app.verticals.dummy.tools
 import app.verticals.dummy.graph
@@ -23,6 +24,15 @@ import app.verticals.contract_tracking.graph
 # short (5 min) so the mechanism is easy to observe while testing.
 SCHEDULED_INGESTION_INTERVAL_MINUTES = int(
     os.getenv("SCHEDULED_INGESTION_INTERVAL_MINUTES", "5")
+)
+
+# Section 8.4's Trigger 2: "a daily scheduled job re-checks every
+# open, overdue action item." Deliberately NOT a literal 24-hour
+# cadence here — same reasoning as the ingestion interval above: a
+# short, configurable default makes this observable during dev/demo
+# without waiting a full day to see it fire.
+SCHEDULED_FOLLOWUP_INTERVAL_MINUTES = int(
+    os.getenv("SCHEDULED_FOLLOWUP_INTERVAL_MINUTES", "10")
 )
 
 scheduler = BackgroundScheduler()
@@ -59,6 +69,12 @@ async def lifespan(app: FastAPI):
         "interval",
         minutes=SCHEDULED_INGESTION_INTERVAL_MINUTES,
         id="scheduled_ingestion",
+    )
+    scheduler.add_job(
+        run_followup_check,
+        "interval",
+        minutes=SCHEDULED_FOLLOWUP_INTERVAL_MINUTES,
+        id="scheduled_meeting_action_items_followup",
     )
     scheduler.start()
     yield

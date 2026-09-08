@@ -18,6 +18,18 @@ export interface AgentDecisionDetail {
 
 export interface AgentRunDetail extends AgentRunSummary {
   decisions: AgentDecisionDetail[];
+  role_matches: RoleMatchSummary[];
+}
+
+export interface RoleMatchSummary {
+  id: string;
+  rank: number;
+  employee_name: string | null;
+  department: string | null;
+  rationale: string;
+  confidence: number;
+  notified: boolean;
+  utilization_pct: number | null;
 }
 
 export interface SubmissionResponse {

@@ -1,0 +1,38 @@
+# Incident: Failed Canary Deployment Rollback — Order Service
+Date: 2024-11-18
+Service: order-service
+Severity: P2
+
+## Summary
+A canary deployment of order-service v3.8.0 introduced a database migration that was not backward-compatible. When the canary showed elevated error rates and rollback was triggered, the rollback itself failed because the old code (v3.7.2) could not read the new database schema. Manual intervention was required to restore service.
+
+## Timeline
+- 10:00 UTC — Canary deployment of order-service v3.8.0 begins (10% traffic)
+- 10:05 UTC — Canary metrics show 15% error rate on order creation endpoint
+- 10:08 UTC — Automated rollback triggered by error rate threshold
+- 10:09 UTC — Rollback fails: v3.7.2 pods crash on startup — SQL column `order_metadata` (added by v3.8.0 migration) referenced by old ORM mapping causes crash
+- 10:12 UTC — On-call paged for failed rollback
+- 10:18 UTC — Root cause identified: forward-only migration broke backward compatibility
+- 10:25 UTC — Hotfix: v3.7.2 ORM mapping patched to ignore unknown columns, redeployed
+- 10:35 UTC — Patched v3.7.2 running stable, error rate back to baseline
+- 10:50 UTC — v3.8.0 code bug fixed (missing null check), re-deployed successfully via full canary
+
+## Root Cause
+The v3.8.0 release included a database migration that added a new column (`order_metadata JSONB`) and modified the ORM model to expect it. The migration was forward-only — no down-migration was provided. When the canary failed and rollback was triggered, the old v3.7.2 code was redeployed against the already-migrated database. The old ORM model did not recognize the new column and crashed on startup, making rollback impossible without manual intervention.
+
+## Impact
+- 35 minutes of degraded order processing (10:00–10:35 UTC)
+- Only canary traffic (10%) was affected during the first 8 minutes
+- Full service disruption for 27 minutes during the failed rollback window
+- ~2,100 orders failed during the incident
+
+## Mitigation
+- Immediate: patched old version to tolerate the new column, redeployed
+- Short-term: added mandatory backward-compatible migration policy — all migrations must work with both N and N-1 code versions
+- Long-term: implemented expand-contract migration pattern; added rollback smoke test to CI pipeline that deploys N-1 code against N schema
+
+## Lessons Learned
+1. Database migrations must be backward-compatible with the previous code version (expand-contract pattern).
+2. Rollback testing should be part of CI — deploy old code against new schema automatically.
+3. Canary deployments need a "schema compatibility gate" before proceeding.
+4. ORM models should tolerate unknown columns gracefully (use `__table_args__ = {"extend_existing": True}` or equivalent).

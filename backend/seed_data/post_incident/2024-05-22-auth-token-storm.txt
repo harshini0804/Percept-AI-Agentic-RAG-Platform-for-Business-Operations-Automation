@@ -1,0 +1,38 @@
+# Incident: Authentication Token Refresh Storm
+Date: 2024-05-22
+Service: auth-service
+Severity: P1
+
+## Summary
+A thundering-herd token refresh storm caused the auth-service to become unresponsive for 35 minutes. All downstream services relying on JWT validation were unable to authenticate requests, resulting in a platform-wide partial outage.
+
+## Timeline
+- 09:00 UTC — Routine key rotation completed for JWT signing keys
+- 09:01 UTC — All existing tokens invalidated simultaneously (expected behavior with old rotation logic)
+- 09:02 UTC — Every active session across all services attempts token refresh concurrently
+- 09:03 UTC — Auth-service CPU at 100%, request queue depth exceeds 50,000
+- 09:08 UTC — On-call paged, begins investigation
+- 09:15 UTC — Root cause identified: key rotation invalidated all tokens at once instead of graceful dual-key overlap
+- 09:20 UTC — Emergency: old signing key re-added to validation set, new tokens still issued with new key
+- 09:25 UTC — Request storm subsides as clients successfully refresh
+- 09:36 UTC — All metrics return to normal
+
+## Root Cause
+The JWT key rotation procedure replaced the signing key atomically — the old key was removed from the validation set at the exact moment the new key was added. This caused every in-flight and cached token across the entire platform to fail validation simultaneously, triggering a coordinated retry storm from all clients. The auth-service was not provisioned to handle 100x normal token refresh load.
+
+## Impact
+- 35 minutes of degraded authentication across all services
+- ~45,000 failed API calls from downstream services
+- Customer-facing error rate spiked to 62% during the incident window
+- Mobile app users experienced force-logout and had to re-authenticate manually
+
+## Mitigation
+- Immediate: re-added old key to validation set to stop the storm
+- Short-term: implemented dual-key overlap window (old key valid for 24h after rotation)
+- Long-term: added token refresh jitter (randomized backoff) to all service clients; provisioned auth-service auto-scaling for 10x burst
+
+## Lessons Learned
+1. Key rotation must use a dual-key overlap window — never atomically swap.
+2. Token refresh clients need jitter/backoff to prevent thundering herd.
+3. Auth-service needs auto-scaling policies for burst scenarios.
+4. Runbook for key rotation should include a rollback step that can be executed in under 2 minutes.

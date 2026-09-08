@@ -1,0 +1,37 @@
+# Incident: Redis Cache Out-of-Memory Kill
+Date: 2024-07-10
+Service: cache-cluster
+Severity: P2
+
+## Summary
+The shared Redis cache cluster was OOM-killed by the kernel, causing a cache stampede across product-catalog, search, and recommendation services. Latency degraded for 28 minutes while the cluster recovered and caches were repopulated.
+
+## Timeline
+- 11:30 UTC — Redis memory usage crosses 90% (no alert configured for this threshold)
+- 11:42 UTC — Redis instance hits maxmemory, OOM-killed by Linux kernel
+- 11:43 UTC — Cache miss rate spikes from 2% to 100% across dependent services
+- 11:44 UTC — Product catalog p99 latency jumps from 80ms to 3.2s (direct DB fallback)
+- 11:48 UTC — On-call alerted by latency breach, begins investigation
+- 11:52 UTC — Redis restarted with empty cache
+- 11:55 UTC — Cache warming script initiated
+- 12:10 UTC — Cache hit rate recovers to 85%, latency normalizing
+- 12:18 UTC — Full recovery, all metrics at baseline
+
+## Root Cause
+The Redis eviction policy was set to `noeviction` (default), meaning Redis would reject new writes rather than evict old keys when memory was full. A marketing campaign at 11:00 UTC caused a 3x spike in product page views, which generated new cache entries faster than TTLs could expire old ones. With no eviction and no memory headroom, Redis exhausted its allocated 8GB and was OOM-killed.
+
+## Impact
+- 28 minutes of degraded performance across product catalog, search, and recommendations
+- ~15,000 users experienced slow page loads (>3s)
+- No data loss (Redis used as cache only, not primary store)
+
+## Mitigation
+- Immediate: restarted Redis, ran cache warming script
+- Short-term: changed eviction policy to `volatile-lru`; increased maxmemory to 12GB
+- Long-term: added memory usage alerting at 70% and 85% thresholds; implemented cache stampede protection (request coalescing) in the application layer
+
+## Lessons Learned
+1. Never use `noeviction` policy for cache workloads — `volatile-lru` or `allkeys-lru` should be the default.
+2. Memory alerting must exist at 70% and 85% thresholds, not just rely on OOM events.
+3. Cache stampede protection (request coalescing / singleflight pattern) should be standard in all cache-dependent services.
+4. Cache warming scripts should be tested regularly, not written ad-hoc during incidents.

@@ -1,0 +1,39 @@
+# Incident: Cascading Timeout in Payments Processing Pipeline
+Date: 2024-09-03
+Service: payments-service
+Severity: P1
+
+## Summary
+A cascading timeout failure in the payments processing pipeline caused a 52-minute outage affecting all payment transactions. The incident originated from a third-party fraud detection API that became slow, which exhausted the payments-service thread pool and cascaded into the order service.
+
+## Timeline
+- 16:10 UTC — Third-party fraud-check API response times increase from 200ms to 8s (their side)
+- 16:12 UTC — Payments-service thread pool begins saturating (sync HTTP calls to fraud API)
+- 16:15 UTC — Thread pool fully exhausted; new payment requests queued indefinitely
+- 16:18 UTC — Order service times out waiting for payments-service, begins retrying
+- 16:20 UTC — Retry amplification: order service retries triple the load on payments-service
+- 16:22 UTC — On-call paged, begins investigation
+- 16:30 UTC — Root cause identified: fraud-check API degradation with no circuit breaker
+- 16:35 UTC — Circuit breaker manually engaged: fraud check bypassed, payments processed without fraud scoring
+- 16:42 UTC — Backlog of queued payments begins draining
+- 17:02 UTC — All systems nominal, fraud API also recovered on their end
+
+## Root Cause
+The payments-service made synchronous HTTP calls to a third-party fraud detection API with a 10-second timeout and no circuit breaker. When the fraud API degraded (their infrastructure issue), each payment request blocked a thread for up to 10 seconds instead of the normal 200ms. With only 50 threads in the pool, the service could only handle 5 requests/second (down from 250/s). The order service's aggressive retry policy (3 retries, no backoff) amplified load 3x, ensuring the payments-service never recovered on its own.
+
+## Impact
+- 52 minutes of payment processing outage
+- ~8,500 failed transactions
+- Estimated revenue impact: $340,000
+- SLA violations for 5 enterprise accounts
+
+## Mitigation
+- Immediate: manually bypassed fraud check to restore payment flow
+- Short-term: added circuit breaker (Hystrix pattern) on fraud API calls with 5s timeout, 60% error threshold, 30s open duration
+- Long-term: converted fraud check to async processing (check runs in background, payment proceeds optimistically); added retry budget pattern to order service (max 10% of requests can be retries)
+
+## Lessons Learned
+1. All external API calls must have circuit breakers — synchronous calls to third parties are a single point of failure.
+2. Retry policies in upstream services need backoff and budget limits to prevent amplification.
+3. Thread pool exhaustion is a cascading failure vector — use bulkhead isolation for critical vs non-critical integrations.
+4. Fraud checks should be async/optimistic for payment flows to avoid blocking the critical path.

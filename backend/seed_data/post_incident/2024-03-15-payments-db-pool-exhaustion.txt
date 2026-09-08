@@ -1,0 +1,37 @@
+# Incident: Database Connection Pool Exhaustion — Payments Service
+Date: 2024-03-15
+Service: payments-service
+Severity: P1
+
+## Summary
+The payments-service experienced a complete outage lasting 47 minutes due to exhaustion of the PostgreSQL connection pool. All transaction processing halted, affecting approximately 12,000 customers during peak hours.
+
+## Timeline
+- 14:02 UTC — Monitoring alert: payments-service p99 latency exceeds 5s threshold
+- 14:05 UTC — On-call engineer acknowledges alert, begins investigation
+- 14:08 UTC — Database dashboard shows 100/100 connections in use, 340 requests queued
+- 14:12 UTC — Confirmed: connection leak in the new batch reconciliation job deployed at 13:45
+- 14:18 UTC — Batch job killed, but pool remains saturated (leaked connections not returned)
+- 14:22 UTC — Decision to restart payments-service pods (rolling restart)
+- 14:30 UTC — First pod healthy, connections draining
+- 14:49 UTC — All pods healthy, latency back to baseline
+
+## Root Cause
+The batch reconciliation job (deployed in release v2.14.3 at 13:45 UTC) opened database connections inside a loop without using a context manager or try/finally block. Each iteration acquired a connection but never released it on exception paths. Under normal flow the connections were returned, but a upstream API timeout caused exceptions on ~60% of iterations, leaking those connections permanently until process restart.
+
+## Impact
+- 47 minutes of full payments outage (14:02–14:49 UTC)
+- ~12,000 customers unable to complete transactions
+- Estimated revenue impact: $180,000
+- 3 SLA violations triggered for enterprise clients
+
+## Mitigation
+- Immediate: killed the batch job and performed rolling pod restart
+- Short-term: reverted batch reconciliation to v2.14.2
+- Long-term: enforced context manager pattern for all DB connections via linting rule; added connection pool saturation alert at 80% threshold
+
+## Lessons Learned
+1. All database connections must use context managers — add a lint rule to enforce this.
+2. Batch jobs should run in isolated connection pools, not share the transactional pool.
+3. Connection pool saturation should alert at 80%, not only when fully exhausted.
+4. The deploy occurred during peak hours — enforce deployment windows outside 13:00–17:00 UTC.

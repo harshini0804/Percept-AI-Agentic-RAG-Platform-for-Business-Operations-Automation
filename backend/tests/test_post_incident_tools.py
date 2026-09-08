@@ -114,7 +114,7 @@ def test_create_incident_ticket(existing_run_id, sample_incident_id):
         run_id=existing_run_id,
     )
 
-    assert result["status"] == "created"
+    assert result["status"] == "open"
     ticket_id = result["ticket_id"]
     assert ticket_id is not None
 
@@ -144,7 +144,7 @@ def test_create_incident_ticket_empty_linked_ids(existing_run_id):
         run_id=existing_run_id,
     )
 
-    assert result["status"] == "created"
+    assert result["status"] == "open"
     ticket_id = result["ticket_id"]
     assert ticket_id is not None
 

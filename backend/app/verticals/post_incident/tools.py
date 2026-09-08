@@ -167,13 +167,14 @@ def create_incident_ticket(
     conn = get_connection()
     try:
         with conn.cursor() as cur:
+            ids = [str(x) for x in linked_incident_ids] if linked_incident_ids else []
             cur.execute(
                 """
                 INSERT INTO incident_tickets (run_id, title, linked_incident_ids, status)
-                VALUES (%s, %s, %s, %s)
+                VALUES (%s, %s, %s::uuid[], %s)
                 RETURNING id;
                 """,
-                (run_id, title, linked_incident_ids or [], "open"),
+                (run_id, title, ids, "open"),
             )
             ticket_id = cur.fetchone()["id"]
         conn.commit()

@@ -134,3 +134,30 @@ def test_create_incident_ticket(existing_run_id, sample_incident_id):
             assert row["status"] == "open"
     finally:
         conn.close()
+
+
+def test_create_incident_ticket_empty_linked_ids(existing_run_id):
+    """create_incident_ticket succeeds when linked_incident_ids is None or empty list."""
+    result = create_incident_ticket(
+        title="Automated Remediation: General Restart",
+        linked_incident_ids=None,
+        run_id=existing_run_id,
+    )
+
+    assert result["status"] == "created"
+    ticket_id = result["ticket_id"]
+    assert ticket_id is not None
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, run_id, title, linked_incident_ids, status FROM incident_tickets WHERE id = %s;",
+                (ticket_id,),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            assert str(row["id"]) == ticket_id
+            assert row["linked_incident_ids"] == []
+    finally:
+        conn.close()

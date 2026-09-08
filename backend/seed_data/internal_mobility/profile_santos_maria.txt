@@ -1,0 +1,12 @@
+Maria Santos — Product Manager | Design | Berlin
+
+Maria is a product manager with 7 years of experience, 3 at the company. She owns the B2B checkout and invoicing product line, managing a team of 4 engineers. She is known for writing exceptionally clear PRDs and for driving the OKR process within her pod. Before moving into product, she worked as a data analyst, giving her strong SQL and metrics instincts.
+
+Key contributions:
+- Drove the B2B invoicing feature from concept to launch (2025 Q1), adding $2.1M ARR.
+- Built the product analytics dashboard used by the entire product team.
+- Established the pod-level OKR cadence, improving sprint goal completion from 60% to 88%.
+- Conducted 40+ customer discovery interviews for the self-serve pricing initiative.
+
+Maria's core skills: product strategy, SQL, data analysis, stakeholder management, roadmap planning.
+Location: Berlin.

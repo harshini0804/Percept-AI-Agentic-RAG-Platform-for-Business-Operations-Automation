@@ -84,7 +84,7 @@ def test_call_llm_returns_tool_calls(monkeypatch):
 
     assert result["content"] is None
     assert result["tool_calls"] == [
-        {"name": "get_ticket_status", "arguments": {"incident_id": "INC-042"}}
+        {"id": None, "name": "get_ticket_status", "arguments": {"incident_id": "INC-042"}}
     ]
 
 

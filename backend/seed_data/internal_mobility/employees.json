@@ -1,0 +1,151 @@
+{
+  "employees": [
+    {
+      "name": "Ayesha Rao",
+      "profile_file": "profile_rao_ayesha.txt",
+      "department": "Engineering",
+      "years_experience": 6,
+      "location": "Bangalore"
+    },
+    {
+      "name": "Viktor Novak",
+      "profile_file": "profile_novak_viktor.txt",
+      "department": "Engineering",
+      "years_experience": 9,
+      "location": "Berlin"
+    },
+    {
+      "name": "Priya Menon",
+      "profile_file": "profile_menon_priya.txt",
+      "department": "Engineering",
+      "years_experience": 5,
+      "location": "Bangalore"
+    },
+    {
+      "name": "James Chen",
+      "profile_file": "profile_chen_james.txt",
+      "department": "Engineering",
+      "years_experience": 4,
+      "location": "Toronto"
+    },
+    {
+      "name": "Sara Kim",
+      "profile_file": "profile_kim_sara.txt",
+      "department": "Engineering",
+      "years_experience": 7,
+      "location": "Toronto"
+    },
+    {
+      "name": "Maria Santos",
+      "profile_file": "profile_santos_maria.txt",
+      "department": "Design",
+      "years_experience": 7,
+      "location": "Berlin"
+    },
+    {
+      "name": "Leo Zhang",
+      "profile_file": "profile_zhang_leo.txt",
+      "department": "Data Science",
+      "years_experience": 5,
+      "location": "Bangalore"
+    },
+    {
+      "name": "Anika Desai",
+      "profile_file": "profile_desai_anika.txt",
+      "department": "Data Science",
+      "years_experience": 6,
+      "location": "Bangalore"
+    },
+    {
+      "name": "Tom Wilson",
+      "profile_file": "profile_wilson_tom.txt",
+      "department": "Engineering",
+      "years_experience": 3,
+      "location": "Toronto"
+    }
+  ],
+  "roles": [
+    {
+      "title": "Staff Backend Engineer — Payments",
+      "description": "Staff-level backend engineer to lead the payments and billing infrastructure. Requires deep experience with high-throughput distributed systems, event-driven architectures, and production-grade Postgres. Will own the payments pipeline and mentor senior engineers.",
+      "department": "Engineering",
+      "min_experience": 7,
+      "location": "Bangalore"
+    },
+    {
+      "title": "Senior Full-Stack Developer — Customer Platform",
+      "description": "Senior full-stack developer to work on the customer-facing platform, including the checkout and invoicing flows. Should have strong React and backend skills, with experience building and maintaining production authentication systems.",
+      "department": "Engineering",
+      "min_experience": 4,
+      "location": "Toronto"
+    },
+    {
+      "title": "Senior Data Engineer — Streaming",
+      "description": "Senior data engineer to own and expand the real-time streaming analytics infrastructure. Should have deep Kafka and Spark experience, and strong data modeling skills. Will lead the streaming team and work closely with ML engineering.",
+      "department": "Data Science",
+      "min_experience": 5,
+      "location": "Bangalore"
+    },
+    {
+      "title": "ML Engineer — Recommendations",
+      "description": "ML engineer to lead the product recommendations initiative. Should have strong ML fundamentals and production deployment experience. Will work across the data science and backend teams to build and serve models at scale.",
+      "department": "Data Science",
+      "min_experience": 3,
+      "location": "Bangalore"
+    },
+    {
+      "title": "Senior QA Automation Engineer",
+      "description": "Senior QA automation engineer to extend the E2E testing framework to new product areas. Should have strong experience with modern testing frameworks (Cypress, Playwright) and CI/CD pipelines. Will lead test strategy for the platform team.",
+      "department": "Engineering",
+      "min_experience": 5,
+      "location": "Toronto"
+    }
+  ],
+  "employee_workload": [
+    {
+      "employee_name": "Ayesha Rao",
+      "utilization_pct": 85,
+      "free_by_date": "2026-10-15"
+    },
+    {
+      "employee_name": "Viktor Novak",
+      "utilization_pct": 100,
+      "free_by_date": null
+    },
+    {
+      "employee_name": "Priya Menon",
+      "utilization_pct": 90,
+      "free_by_date": "2026-09-30"
+    },
+    {
+      "employee_name": "James Chen",
+      "utilization_pct": 70,
+      "free_by_date": null
+    },
+    {
+      "employee_name": "Sara Kim",
+      "utilization_pct": 95,
+      "free_by_date": "2026-12-01"
+    },
+    {
+      "employee_name": "Maria Santos",
+      "utilization_pct": 60,
+      "free_by_date": null
+    },
+    {
+      "employee_name": "Leo Zhang",
+      "utilization_pct": 75,
+      "free_by_date": null
+    },
+    {
+      "employee_name": "Anika Desai",
+      "utilization_pct": 80,
+      "free_by_date": "2026-11-01"
+    },
+    {
+      "employee_name": "Tom Wilson",
+      "utilization_pct": 50,
+      "free_by_date": null
+    }
+  ]
+}

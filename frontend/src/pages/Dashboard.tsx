@@ -1,44 +1,82 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { listAgentRuns } from "../api/agentRuns";
+import { listAgentRuns, getAgentRunStats } from "../api/agentRuns";
 import { ExternalLink } from "lucide-react";
 
+// Mirrors the four real verticals (Section 4.3) plus the dummy
+// reference vertical — same constant used in Escalations.tsx and
+// Notifications.tsx, kept here too since the backend doesn't expose
+// a canonical vertical list endpoint.
+const VERTICAL_OPTIONS = [
+  { value: "", label: "All verticals" },
+  { value: "dummy", label: "Dummy" },
+  { value: "post_incident", label: "Post-Incident" },
+  { value: "internal_mobility", label: "Internal Mobility" },
+  { value: "contract_tracking", label: "Contract Tracking" },
+  { value: "meeting_action_items", label: "Meeting Action Items" },
+];
 
 function Dashboard() {
-  const { data: runs, isLoading, error } = useQuery({
-    queryKey: ["agent-runs"],
-    queryFn: () => listAgentRuns(),
+  const [vertical, setVertical] = useState("");
+
+  const { data: runs, isLoading: runsLoading, error: runsError } = useQuery({
+    queryKey: ["agent-runs", vertical],
+    queryFn: () => listAgentRuns(vertical || undefined),
   });
 
-  if (isLoading) return <p>Loading runs...</p>;
-  if (error) return <p className="text-red-600">Error: {(error as Error).message}</p>;
+  // Fetched separately from the recent-runs list — the list is
+  // capped at 50 rows for display, but the summary cards need a
+  // real aggregate count across ALL matching runs, not just one page.
+  const { data: stats, isLoading: statsLoading, error: statsError } = useQuery({
+    queryKey: ["agent-run-stats", vertical],
+    queryFn: () => getAgentRunStats(vertical || undefined),
+  });
 
-  const total = runs?.length ?? 0;
-  const completed = runs?.filter((r) => r.status === "completed").length ?? 0;
-  const escalated = runs?.filter((r) => r.status === "escalated").length ?? 0;
-  const running = runs?.filter((r) => r.status === "running").length ?? 0;
+  if (runsLoading || statsLoading) return <p>Loading runs...</p>;
+  if (runsError) return <p className="text-red-600">Error: {(runsError as Error).message}</p>;
+  if (statsError) return <p className="text-red-600">Error: {(statsError as Error).message}</p>;
 
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-4">Dashboard</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold">Dashboard</h2>
+        <select
+          value={vertical}
+          onChange={(e) => setVertical(e.target.value)}
+          className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white"
+        >
+          {VERTICAL_OPTIONS.map((v) => (
+            <option key={v.value} value={v.value}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      {/* Vital metric cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      {/* Vital metric cards — real aggregate counts, scoped to the
+          selected vertical (or all, if none selected), not derived
+          from the (possibly truncated) recent-runs list below. */}
+      <div className="grid grid-cols-5 gap-4 mb-6">
         <div className="bg-white rounded shadow p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wide">Total Runs</p>
-          <p className="text-2xl font-semibold mt-1">{total}</p>
+          <p className="text-2xl font-semibold mt-1">{stats?.total ?? 0}</p>
         </div>
         <div className="bg-white rounded shadow p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wide">Completed</p>
-          <p className="text-2xl font-semibold mt-1 text-green-700">{completed}</p>
+          <p className="text-2xl font-semibold mt-1 text-green-700">{stats?.completed ?? 0}</p>
         </div>
         <div className="bg-white rounded shadow p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wide">Escalated</p>
-          <p className="text-2xl font-semibold mt-1 text-amber-700">{escalated}</p>
+          <p className="text-2xl font-semibold mt-1 text-amber-700">{stats?.escalated ?? 0}</p>
+        </div>
+        <div className="bg-white rounded shadow p-4">
+          <p className="text-xs text-slate-500 uppercase tracking-wide">Rejected</p>
+          <p className="text-2xl font-semibold mt-1 text-red-700">{stats?.rejected ?? 0}</p>
         </div>
         <div className="bg-white rounded shadow p-4">
           <p className="text-xs text-slate-500 uppercase tracking-wide">In Progress</p>
-          <p className="text-2xl font-semibold mt-1 text-slate-500">{running}</p>
+          <p className="text-2xl font-semibold mt-1 text-slate-500">{stats?.running ?? 0}</p>
         </div>
       </div>
 
@@ -64,6 +102,8 @@ function Dashboard() {
                       ? "text-green-700"
                       : run.status === "escalated"
                       ? "text-amber-700"
+                      : run.status === "rejected"
+                      ? "text-red-700"
                       : "text-slate-500"
                   }
                 >
@@ -72,7 +112,7 @@ function Dashboard() {
               </td>
               <td className="p-3">{run.confidence?.toFixed(2) ?? "—"}</td>
               <td className="p-3">{new Date(run.created_at).toLocaleString()}</td>
-                            <td className="p-3">
+              <td className="p-3">
                 <Link
                   to={`/runs/${run.id}`}
                   title="View run"

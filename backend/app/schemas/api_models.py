@@ -28,6 +28,16 @@ class AgentDecisionDetail(BaseModel):
 class AgentRunDetail(AgentRunSummary):
     decisions: list[AgentDecisionDetail]
 
+class AgentRunStats(BaseModel):
+    """
+    Real aggregate counts across ALL runs needed for the Dashboard's summary cards. 
+    """
+    total: int
+    completed: int
+    escalated: int
+    running: int
+    rejected: int
+
 
 class EscalationSummary(BaseModel):
     id: str
@@ -53,3 +63,4 @@ class NotificationSummary(BaseModel):
     message: str
     read: bool
     created_at: datetime
+

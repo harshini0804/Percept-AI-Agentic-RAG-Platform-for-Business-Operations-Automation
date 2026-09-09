@@ -6,6 +6,7 @@ import Escalations from "./pages/Escalations";
 import Notifications from "./pages/Notifications";
 import Admin from "./pages/Admin";
 import Evaluation from "./pages/Evaluation";
+import Tracker from "./pages/Tracker";
 
 
 const NAV_ITEMS = [
@@ -13,6 +14,7 @@ const NAV_ITEMS = [
   { path: "/submit", label: "Submit" },
   { path: "/escalations", label: "Escalations" },
   { path: "/notifications", label: "Notifications" },
+  { path: "/tracker", label: "Tracker" },
   { path: "/admin", label: "Admin" },
   { path: "/evaluation", label: "Evaluation" },
 ];
@@ -42,6 +44,7 @@ function App() {
             <Route path="/runs/:runId" element={<RunDetail />} />
             <Route path="/escalations" element={<Escalations />} />
             <Route path="/notifications" element={<Notifications />} />
+            <Route path="/tracker" element={<Tracker />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/evaluation" element={<Evaluation />} />
           </Routes>

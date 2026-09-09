@@ -4,7 +4,7 @@ which defines the internal agent run contract (Section 3.2). These
 describe what the API actually sends/receives over HTTP.
 """
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, Any
 from pydantic import BaseModel
 
@@ -81,5 +81,24 @@ class RoleMatchSummary(BaseModel):
     notified: bool
     utilization_pct: Optional[int] = None
 
+class ActionItemTrackerEntry(BaseModel):
+    """
+    One action item's current status (Vertical 4, Section 8.4) — "a
+    living tracker view, not a one-time report... status changes
+    across repeated visits as the daily job runs." Powers the
+    Tracker page, which reads action_items directly rather than
+    through agent_runs, since an item's state accumulates across
+    multiple separate Trigger 1/Trigger 2 runs over time.
+    """
+    id: str
+    meeting_id: str
+    description: str
+    owner: str
+    deadline: Optional[date] = None
+    status: str
+    nudge_count: int
+    escalated: bool
+    is_recurring: bool
+    created_at: datetime
 
 AgentRunDetail.model_rebuild()

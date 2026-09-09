@@ -21,6 +21,7 @@ this trigger at all).
 """
 
 import json
+from datetime import date
 
 from app.core.db import get_connection
 from app.core.orchestration import start_run
@@ -31,7 +32,7 @@ from app.core.embeddings import upsert_embedding
 from app.core.documents import resolve_document_text
 from app.core.vertical_registry import register_vertical
 from app.schemas.agent_contract import AgentRunInput, AgentRunOutput, ActionTaken
-from app.verticals.meeting_action_items.prompts import EXTRACTION_SYSTEM_PROMPT
+from app.verticals.meeting_action_items.prompts import build_extraction_prompt
 
 # Section 8.4 doesn't specify an exact number ("a strong match") —
 # starting default per Section 12.2, tunable per-vertical without
@@ -56,17 +57,37 @@ def _create_meeting(doc_id: str | None) -> str:
         conn.close()
 
 
+def _validate_deadline(raw_deadline) -> str | None:
+    """
+    Validates a deadline value returned by the LLM. Returns a real
+    ISO date string, or None if the value is missing, not a string,
+    or not a genuinely parseable date — this is what prevents an
+    invented or malformed deadline from ever reaching the database,
+    now that the extraction prompt asks the LLM to attempt real date
+    resolution rather than always leaving it null.
+    """
+    if not raw_deadline or not isinstance(raw_deadline, str):
+        return None
+    try:
+        date.fromisoformat(raw_deadline)
+        return raw_deadline
+    except ValueError:
+        return None
+
+
 def _extract_candidate_items(transcript_text: str) -> list[dict]:
     """
     Calls the LLM to extract candidate action items. Fails SAFE on
     malformed output (returns an empty list rather than crashing the
     run) — matching this project's established pattern (see the
     dummy vertical's finalize_node) for handling an LLM not returning
-    valid JSON.
+    valid JSON. Each item's deadline is separately validated via
+    _validate_deadline — a plausible-looking but unparseable date
+    string degrades to None rather than being stored as-is.
     """
     response = call_llm(
         messages=[
-            {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+            {"role": "system", "content": build_extraction_prompt(date.today())},
             {"role": "user", "content": transcript_text},
         ]
     )
@@ -75,20 +96,25 @@ def _extract_candidate_items(transcript_text: str) -> list[dict]:
         items = json.loads(response["content"])
         if not isinstance(items, list):
             return []
-        return [
-            item
-            for item in items
-            if isinstance(item, dict) and "description" in item and "owner" in item
-        ]
+
+        valid_items = []
+        for item in items:
+            if not (isinstance(item, dict) and "description" in item and "owner" in item):
+                continue
+            item["deadline"] = _validate_deadline(item.get("deadline"))
+            valid_items.append(item)
+        return valid_items
     except (json.JSONDecodeError, TypeError):
         return []
 
 
-def _check_recurrence(vertical: str, owner: str, description: str) -> tuple[bool, str | None]:
+def _check_recurrence(
+    vertical: str, owner: str, description: str
+) -> tuple[bool, str | None, float | None]:
     """
     Searches for a strong match among this owner's other open action
     items (Section 8.4's recurrence check). Returns
-    (is_recurring, matched_action_item_id_or_None).
+    (is_recurring, matched_action_item_id_or_None, top_similarity_or_None).
     """
     results, _ = search_with_retry(
         query_text=description,
@@ -100,9 +126,10 @@ def _check_recurrence(vertical: str, owner: str, description: str) -> tuple[bool
         extra_filter_params=(owner,),
     )
 
+    top_score = results[0]["similarity"] if results else None
     if results and results[0]["similarity"] >= RECURRENCE_MATCH_THRESHOLD:
-        return True, str(results[0]["source_id"])
-    return False, None
+        return True, str(results[0]["source_id"]), top_score
+    return False, None, top_score
 
 
 def _insert_action_item(
@@ -164,13 +191,19 @@ def run_meeting_action_items(agent_input: AgentRunInput) -> AgentRunOutput:
         description = item["description"]
         deadline = item.get("deadline") or None
 
-        is_recurring, recurring_from = _check_recurrence(
+        is_recurring, recurring_from, top_score = _check_recurrence(
             agent_input.vertical, owner, description
         )
         log_decision(
             run_id,
             "retrieval",
-            {"owner": owner, "is_recurring": is_recurring, "recurring_from": recurring_from},
+            {
+                "owner": owner,
+                "is_recurring": is_recurring,
+                "recurring_from": recurring_from,
+                "top_score": top_score,
+                "num_results": 1 if top_score is not None else 0,
+            },
         )
 
         action_item_id = _insert_action_item(

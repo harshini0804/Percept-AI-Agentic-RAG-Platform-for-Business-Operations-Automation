@@ -18,6 +18,7 @@ import shutil
 from pathlib import Path
 
 from app.core.ingestion import ingest_staging_folder, STAGING_ROOT
+from app.verticals.meeting_action_items.seed_local import seed_meeting_action_items
 
 # Synthetic data committed to the repo under backend/seed_data/,
 # copied into each vertical's staging folder before ingestion. Only
@@ -58,6 +59,13 @@ def main():
     for entry in VERTICALS_TO_SEED:
         print(f"\n{entry['vertical']}:")
         seed_vertical(entry["vertical"], entry["source_type"])
+
+    # meeting_action_items doesn't fit the generic staging-folder
+    # pattern above (its KB content is a byproduct of real LLM
+    # extraction, not raw chunked text) — seeded separately.
+    print("\nmeeting_action_items:")
+    seed_meeting_action_items()
+
     print("\nSeeding complete.")
 
 

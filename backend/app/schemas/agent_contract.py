@@ -113,26 +113,79 @@ def build_agent_run_output(state: dict) -> AgentRunOutput:
     a vertical's graph needs.
 
     Wraps AgentState's singular `action_taken` into the contract's
-    `actions_taken` list — every vertical built so far fires at most
-    one action per run, but the contract itself allows for more.
+    `actions_taken` list — most verticals fire at most one action per
+    run, and for those `state["action_taken"]`/`state["escalated"]`
+    work exactly as before (unchanged, fully backward compatible).
+
+    Multi-item verticals (Section 8.3 Vertical 3: one contract can
+    have several obligations, each independently auto-actioned or
+    escalated in the same run; Section 8.4 Vertical 4 has the same
+    shape for action items) instead set the plural, optional
+    `state["actions_taken"]` (list[dict] with the same
+    action_name/result shape as the singular action_taken) and/or
+    `state["escalations"]` (list[dict] with a "reason" key per
+    item). Both plural keys are merged in alongside anything set via
+    the singular keys, so a vertical could technically use either
+    or both without conflict.
+
+    At the run level, `escalated` becomes True if ANY item
+    escalated (singular or plural), and `escalation_reason` is the
+    single reason verbatim when there's exactly one, or an
+    aggregate summary when there are several — preserving today's
+    exact single-escalation behavior unchanged.
     """
+    actions_taken = []
+
     action_taken = state.get("action_taken")
-    actions_taken = (
-        [
+    if action_taken:
+        actions_taken.append(
             ActionTaken(
                 action_name=action_taken["action_name"],
                 detail=action_taken.get("result"),
             )
-        ]
-        if action_taken
-        else []
-    )
+        )
+
+    for item in state.get("actions_taken", []):
+        actions_taken.append(
+            ActionTaken(
+                action_name=item["action_name"],
+                target_id=item.get("target_id"),
+                detail=item.get("result") or item.get("detail"),
+            )
+        )
+
+    reasons = []
+    if state.get("escalated") and state.get("escalation_reason"):
+        reasons.append(state["escalation_reason"])
+    for esc in state.get("escalations", []):
+        if esc.get("reason"):
+            reasons.append(esc["reason"])
+
+    any_escalated = bool(state.get("escalated")) or bool(state.get("escalations"))
+
+    if not reasons:
+        # any_escalated can be True (a non-empty `escalations` list,
+        # or `escalated=True`) even when NOT ONE item actually
+        # carried a "reason" — e.g. state["escalations"] = [{}] or
+        # [{"reason": ""}]. AgentRunOutput's own validator requires
+        # escalation_reason whenever escalated=True, so leaving this
+        # None here would raise an unhandled ValidationError instead
+        # of failing gracefully. Default to a generic reason rather
+        # than silently downgrading any_escalated to False — a
+        # reasonless escalation is still an escalation and still
+        # belongs in front of a human, just with weaker context on
+        # why.
+        escalation_reason = "Escalated (no reason provided)." if any_escalated else None
+    elif len(reasons) == 1:
+        escalation_reason = reasons[0]
+    else:
+        escalation_reason = f"{len(reasons)} items flagged for manual review: " + "; ".join(reasons)
 
     return AgentRunOutput(
         run_id=state["run_id"],
-        status="escalated" if state["escalated"] else "completed",
+        status="escalated" if any_escalated else "completed",
         confidence=state["confidence"],
         actions_taken=actions_taken,
-        escalated=state["escalated"],
-        escalation_reason=state.get("escalation_reason"),
+        escalated=any_escalated,
+        escalation_reason=escalation_reason,
     )

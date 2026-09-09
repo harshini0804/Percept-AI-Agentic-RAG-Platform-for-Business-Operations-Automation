@@ -26,6 +26,21 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`px-2 py-1 rounded text-sm font-medium ${color}`}>{status}</span>;
 }
 
+// Vertical 2 availability badge (Section 8.2): capacity is a signal,
+// never a filter — even a fully-busy candidate stays on the board.
+function CapacityBadge({ utilization }: { utilization: number | null }) {
+  if (utilization === null) return null;
+  return utilization < 100 ? (
+    <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
+      {utilization}% busy
+    </span>
+  ) : (
+    <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
+      Full capacity
+    </span>
+  );
+}
+
 function RunDetail() {
   const { runId } = useParams<{ runId: string }>();
 
@@ -76,12 +91,17 @@ function RunDetail() {
         </div>
       )}
 
-      {/* Reasoning panel */}
+            {/* Reasoning panel — falls back to rendering the raw detail
+          JSON when a vertical doesn't use the dummy's simple
+          {content: string} shape (e.g. meeting_action_items logs
+          {verdict, confidence} or {extracted_count, items}). */}
       {reasoningStep && (
         <div className="bg-white rounded shadow p-6 mb-4">
           <h3 className="font-medium mb-2">LLM Reasoning</h3>
           <pre className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 p-3 rounded">
-            {reasoningStep.detail?.content as string}
+            {typeof reasoningStep.detail?.content === "string"
+              ? (reasoningStep.detail.content as string)
+              : JSON.stringify(reasoningStep.detail, null, 2)}
           </pre>
         </div>
       )}
@@ -98,6 +118,42 @@ function RunDetail() {
           <pre className="text-xs text-slate-500 mt-2">
             {JSON.stringify(actionStep.detail?.result, null, 2)}
           </pre>
+        </div>
+      )}
+
+      {/* Internal Mobility leaderboard (Vertical 2, Section 8.2) */}
+      {run.vertical === "internal_mobility" && run.role_matches.length > 0 && (
+        <div className="bg-white rounded shadow p-6 mb-4">
+          <h3 className="font-medium mb-3">Ranked Candidates</h3>
+          <div className="space-y-3">
+            {run.role_matches.map((m) => (
+              <div key={m.id} className="border border-slate-200 rounded-lg p-3">
+                <div className="flex items-center gap-3 mb-1 flex-wrap">
+                  <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center">
+                    {m.rank}
+                  </span>
+                  <span className="font-medium">{m.employee_name ?? "—"}</span>
+                  {m.department && (
+                    <span className="text-xs text-slate-500">{m.department}</span>
+                  )}
+                  <ConfidenceBadge confidence={m.confidence} />
+                  <CapacityBadge utilization={m.utilization_pct} />
+                  {m.notified ? (
+                    <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+                      Notified
+                    </span>
+                  ) : (
+                    <span className="px-2 py-1 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                      Listed (no alert)
+                    </span>
+                  )}
+                </div>
+                {m.rationale && (
+                  <p className="text-sm text-slate-700 mt-1">{m.rationale}</p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

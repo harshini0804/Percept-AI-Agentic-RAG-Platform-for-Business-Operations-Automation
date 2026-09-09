@@ -5,12 +5,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from app.api import agent_runs, escalations, notifications, admin, evaluation, submissions
+from app.api import agent_runs, escalations, notifications, admin, evaluation, submissions, meeting_action_items
 from app.api.admin import VERTICAL_SOURCE_TYPES
 from app.core.ingestion import ingest_staging_folder
+from app.verticals.meeting_action_items.followup import run_followup_check
 
 import app.verticals.dummy.tools
 import app.verticals.dummy.graph
+import app.verticals.meeting_action_items.tools
+import app.verticals.meeting_action_items.graph
+
+import app.verticals.contract_tracking.tools
+import app.verticals.contract_tracking.graph
+from app.verticals.contract_tracking.scheduler import run_scheduled_contract_ingestion
+
+import app.verticals.internal_mobility.tools
+import app.verticals.internal_mobility.graph
 
 # Section 6.3: "A shared function, called on a timer via APScheduler,
 # scans each vertical's staging folder..." Interval is configurable
@@ -18,6 +28,15 @@ import app.verticals.dummy.graph
 # short (5 min) so the mechanism is easy to observe while testing.
 SCHEDULED_INGESTION_INTERVAL_MINUTES = int(
     os.getenv("SCHEDULED_INGESTION_INTERVAL_MINUTES", "5")
+)
+
+# Section 8.4's Trigger 2: "a daily scheduled job re-checks every
+# open, overdue action item." Deliberately NOT a literal 24-hour
+# cadence here — same reasoning as the ingestion interval above: a
+# short, configurable default makes this observable during dev/demo
+# without waiting a full day to see it fire.
+SCHEDULED_FOLLOWUP_INTERVAL_MINUTES = int(
+    os.getenv("SCHEDULED_FOLLOWUP_INTERVAL_MINUTES", "10")
 )
 
 scheduler = BackgroundScheduler()
@@ -33,18 +52,33 @@ def run_scheduled_ingestion() -> None:
 
     Only "dummy" is excluded here (not a real vertical with real
     scheduled ingestion needs, per its own docstrings elsewhere) —
-    every real vertical listed in VERTICAL_SOURCE_TYPES is scanned.
+    every real vertical listed in VERTICAL_SOURCE_TYPES is scanned,
+    EXCEPT "contract_tracking" (Section 6.4's one deliberate
+    exception): its scheduled ingestion IS the analysis trigger, so
+    it needs clause-level chunking + the full extraction workflow,
+    not the generic embed-only path every other vertical uses here.
+    See app.verticals.contract_tracking.scheduler for why it can't
+    just reuse ingest_staging_folder with a different chunk_fn.
 
     Failures for one vertical are caught and logged, not allowed to
     stop the other verticals' ingestion in the same run.
     """
     for vertical, source_type in VERTICAL_SOURCE_TYPES.items():
+        if vertical == "contract_tracking":
+            continue
         try:
             summary = ingest_staging_folder(vertical=vertical, source_type=source_type)
             if summary["processed"] or summary["errors"]:
                 print(f"[scheduled ingestion] {vertical}: {summary}")
         except Exception as e:
             print(f"[scheduled ingestion] ERROR for vertical '{vertical}': {e}")
+
+    try:
+        summary = run_scheduled_contract_ingestion()
+        if summary["processed"] or summary["errors"]:
+            print(f"[scheduled ingestion] contract_tracking: {summary}")
+    except Exception as e:
+        print(f"[scheduled ingestion] ERROR for vertical 'contract_tracking': {e}")
 
 
 @asynccontextmanager
@@ -54,6 +88,12 @@ async def lifespan(app: FastAPI):
         "interval",
         minutes=SCHEDULED_INGESTION_INTERVAL_MINUTES,
         id="scheduled_ingestion",
+    )
+    scheduler.add_job(
+        run_followup_check,
+        "interval",
+        minutes=SCHEDULED_FOLLOWUP_INTERVAL_MINUTES,
+        id="scheduled_meeting_action_items_followup",
     )
     scheduler.start()
     yield
@@ -76,7 +116,7 @@ app.include_router(notifications.router)
 app.include_router(admin.router)
 app.include_router(evaluation.router)
 app.include_router(submissions.router)
-
+app.include_router(meeting_action_items.router)
 
 @app.get("/health")
 def health_check():

@@ -168,3 +168,119 @@ def test_build_agent_run_output_is_a_real_validated_agent_run_output():
     output = build_agent_run_output(state)
     assert isinstance(output, AgentRunOutput)
     assert output.run_id == "r1"
+
+
+# ---------------------------------------------------------------
+# Multi-item state (Section 8.3/8.4 shape): plural actions_taken /
+# escalations keys, used by verticals where one run can produce
+# several independent actions and/or escalations.
+# ---------------------------------------------------------------
+
+def test_build_agent_run_output_merges_plural_actions_taken():
+    state = {
+        "run_id": "r1",
+        "confidence": 0.8,
+        "actions_taken": [
+            {"action_name": "create_calendar_reminder", "target_id": "ob1", "result": {"reminder_created": True}},
+        ],
+    }
+    output = build_agent_run_output(state)
+    assert output.escalated is False
+    assert len(output.actions_taken) == 1
+    assert output.actions_taken[0].action_name == "create_calendar_reminder"
+    assert output.actions_taken[0].target_id == "ob1"
+
+
+def test_build_agent_run_output_aggregates_multiple_escalation_reasons():
+    state = {
+        "run_id": "r1",
+        "confidence": 0.5,
+        "escalations": [{"reason": "Low confidence on clause 4"}, {"reason": "Ambiguous date"}],
+    }
+    output = build_agent_run_output(state)
+    assert output.escalated is True
+    assert output.status == "escalated"
+    assert "2 items flagged for manual review" in output.escalation_reason
+    assert "Low confidence on clause 4" in output.escalation_reason
+    assert "Ambiguous date" in output.escalation_reason
+
+
+def test_build_agent_run_output_single_plural_escalation_reason_is_verbatim():
+    """Exactly one escalation in the plural list should NOT get the
+    '1 items flagged...' aggregate wording — should read identically
+    to the singular escalation_reason path."""
+    state = {
+        "run_id": "r1",
+        "confidence": 0.5,
+        "escalations": [{"reason": "Low confidence on clause 4"}],
+    }
+    output = build_agent_run_output(state)
+    assert output.escalation_reason == "Low confidence on clause 4"
+
+
+def test_build_agent_run_output_defaults_reason_when_escalation_has_none(monkeypatch=None):
+    """
+    Edge case flagged in review: state["escalations"] can be a
+    non-empty list where NO item actually carries a usable "reason"
+    (missing key, or an empty string) — any_escalated is still True
+    (the list itself is non-empty/escalated=True), but naively
+    `reasons` stays empty, so escalation_reason would be None.
+    AgentRunOutput.escalation_reason_required_if_escalated then
+    raises ValueError whenever escalated=True and escalation_reason
+    is falsy — this must NOT propagate as an unhandled exception out
+    of build_agent_run_output.
+    """
+    state = {
+        "run_id": "r1",
+        "confidence": 0.5,
+        "escalations": [{"reason": ""}],
+    }
+    output = build_agent_run_output(state)  # must not raise
+    assert output.escalated is True
+    assert output.status == "escalated"
+    assert output.escalation_reason == "Escalated (no reason provided)."
+
+
+def test_build_agent_run_output_defaults_reason_when_escalation_item_missing_reason_key():
+    """Same edge case, but the dict is missing the 'reason' key
+    entirely rather than having an empty string."""
+    state = {
+        "run_id": "r1",
+        "confidence": 0.5,
+        "escalations": [{}],
+    }
+    output = build_agent_run_output(state)  # must not raise
+    assert output.escalated is True
+    assert output.escalation_reason == "Escalated (no reason provided)."
+
+
+def test_build_agent_run_output_defaults_reason_for_singular_escalated_with_no_reason():
+    """Same defensiveness, but via the ORIGINAL singular path:
+    escalated=True with no escalation_reason and no plural
+    escalations list at all — a vertical author simply forgetting to
+    set escalation_reason. Must not raise."""
+    state = {
+        "run_id": "r1",
+        "confidence": 0.5,
+        "escalated": True,
+    }
+    output = build_agent_run_output(state)  # must not raise
+    assert output.escalated is True
+    assert output.escalation_reason == "Escalated (no reason provided)."
+
+
+def test_build_agent_run_output_mixed_plural_actions_and_reasonless_escalation():
+    """A run with one real action AND one reasonless escalation should
+    still surface the action, still escalate, and still get a safe
+    default reason rather than crashing — this is the shape a future
+    vertical (or a Trigger-2-style rewrite) could plausibly produce."""
+    state = {
+        "run_id": "r1",
+        "confidence": 0.6,
+        "actions_taken": [{"action_name": "create_calendar_reminder", "target_id": "ob1"}],
+        "escalations": [{}],
+    }
+    output = build_agent_run_output(state)
+    assert output.escalated is True
+    assert len(output.actions_taken) == 1
+    assert output.escalation_reason == "Escalated (no reason provided)."

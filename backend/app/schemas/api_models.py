@@ -4,7 +4,7 @@ which defines the internal agent run contract (Section 3.2). These
 describe what the API actually sends/receives over HTTP.
 """
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, Any
 from pydantic import BaseModel
 
@@ -27,6 +27,19 @@ class AgentDecisionDetail(BaseModel):
 
 class AgentRunDetail(AgentRunSummary):
     decisions: list[AgentDecisionDetail]
+    # Vertical 2 (internal_mobility, Section 8.2): the ranked candidate
+    # leaderboard for this run. Empty for non-internal-mobility runs.
+    role_matches: list["RoleMatchSummary"] = []
+
+class AgentRunStats(BaseModel):
+    """
+    Real aggregate counts across ALL runs needed for the Dashboard's summary cards. 
+    """
+    total: int
+    completed: int
+    escalated: int
+    running: int
+    rejected: int
 
 
 class EscalationSummary(BaseModel):
@@ -53,3 +66,39 @@ class NotificationSummary(BaseModel):
     message: str
     read: bool
     created_at: datetime
+
+
+class RoleMatchSummary(BaseModel):
+    """One ranked internal candidate for a role (Vertical 2, Section 8.2),
+    joined with the employee's name/department and the dynamic capacity
+    badge from employee_workload."""
+    id: str
+    rank: int
+    employee_name: Optional[str] = None
+    department: Optional[str] = None
+    rationale: str
+    confidence: float
+    notified: bool
+    utilization_pct: Optional[int] = None
+
+class ActionItemTrackerEntry(BaseModel):
+    """
+    One action item's current status (Vertical 4, Section 8.4) — "a
+    living tracker view, not a one-time report... status changes
+    across repeated visits as the daily job runs." Powers the
+    Tracker page, which reads action_items directly rather than
+    through agent_runs, since an item's state accumulates across
+    multiple separate Trigger 1/Trigger 2 runs over time.
+    """
+    id: str
+    meeting_id: str
+    description: str
+    owner: str
+    deadline: Optional[date] = None
+    status: str
+    nudge_count: int
+    escalated: bool
+    is_recurring: bool
+    created_at: datetime
+
+AgentRunDetail.model_rebuild()

@@ -18,6 +18,26 @@ export interface AgentDecisionDetail {
 
 export interface AgentRunDetail extends AgentRunSummary {
   decisions: AgentDecisionDetail[];
+  role_matches: RoleMatchSummary[];
+}
+
+export interface RoleMatchSummary {
+  id: string;
+  rank: number;
+  employee_name: string | null;
+  department: string | null;
+  rationale: string;
+  confidence: number;
+  notified: boolean;
+  utilization_pct: number | null;
+}
+
+export interface AgentRunStats {
+  total: number;
+  completed: number;
+  escalated: number;
+  running: number;
+  rejected: number;
 }
 
 export interface SubmissionResponse {
@@ -31,6 +51,12 @@ export function listAgentRuns(vertical?: string): Promise<AgentRunSummary[]> {
   const query = vertical ? `?vertical=${vertical}` : "";
   return apiFetch(`/agent-runs${query}`);
 }
+
+export function getAgentRunStats(vertical?: string): Promise<AgentRunStats> {
+  const query = vertical ? `?vertical=${vertical}` : "";
+  return apiFetch(`/agent-runs/summary${query}`);
+}
+
 
 export function getAgentRun(runId: string): Promise<AgentRunDetail> {
   return apiFetch(`/agent-runs/${runId}`);

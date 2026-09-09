@@ -1,0 +1,12 @@
+Sara Kim — QA Automation Lead | Engineering | Toronto
+
+Sara leads the QA automation practice for the payments and checkout teams. She designed the shared Cypress + Playwright testing framework that runs on every PR, cutting post-release regression defects by 50%. She is a strong communicator who works closely with product managers to translate acceptance criteria into testable scenarios, and she maintains the test data seeding strategy used by all QA teams.
+
+Key contributions:
+- Designed the shared Cypress + Playwright E2E framework (2024 Q2).
+- Built the synthetic test-data seeding tool used by all QA teams.
+- Automated the regression suite for payments; 95% of critical-path cases covered.
+- Led the incident-to-test translation initiative, converting every P1 incident into a regression test.
+
+Sara's core skills: Cypress, Playwright, Python, SQL, test strategy, CI/CD.
+Location: Toronto.

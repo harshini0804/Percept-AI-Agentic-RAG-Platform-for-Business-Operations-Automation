@@ -1,0 +1,12 @@
+Leo Zhang — ML Engineer | Data Science | Bangalore
+
+Leo is an ML engineer with 5 years of experience, 2 at the company. He built the real-time fraud-detection model now serving the payments pipeline, and he maintains the shared feature store and model-serving infrastructure. He works across the data science and backend teams, bridging model development and production deployment.
+
+Key contributions:
+- Built the real-time fraud-detection model, cutting false positives by 30% (2024 Q4).
+- Designed the shared ML feature store on Redis + Postgres.
+- Led the MLOps pipeline rollout (MLflow + Docker), enabling reproducible model training.
+- Authored the model monitoring dashboard used by the data science team.
+
+Leo's core skills: PyTorch, scikit-learn, Redis, MLflow, Docker, Python, SQL.
+Location: Bangalore.

@@ -1,0 +1,3 @@
+owner: alex
+---
+Alex merged a pull request fixing the connection timeout issue in the deployment pipeline. The fix adjusts the connection pool timeout settings and adds retry logic for transient failures under load.

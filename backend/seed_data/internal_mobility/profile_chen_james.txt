@@ -1,0 +1,12 @@
+James Chen — Full-Stack Developer | Engineering | Toronto
+
+James is a full-stack developer with 4 years of experience, split between frontend and backend work. He built the internal employee referral portal end-to-end and maintains the company's authentication service (OAuth2/SSO). He pairs frequently with the backend team and has contributed to the Postgres schema for the HR data pipeline.
+
+Key contributions:
+- Built the internal employee referral portal (React + FastAPI) end-to-end (2025 Q1).
+- Maintains the SSO authentication service; added SAML support.
+- Contributed to the HR data pipeline's Postgres schema design.
+- Volunteered to mentor a co-op student through their 4-month term.
+
+James's core skills: React, FastAPI, PostgreSQL, OAuth2, SAML, Python, TypeScript.
+Location: Toronto.

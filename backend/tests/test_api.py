@@ -87,6 +87,82 @@ def test_list_agent_runs_filters_by_vertical():
     assert len(results) == 1
     assert results[0]["vertical"] == "post_incident"
 
+def test_agent_run_summary_reflects_true_total_beyond_page_limit():
+    """
+    Regression test for a real bug: the Dashboard's 'Total Runs' card
+    used to be computed from a single paginated page (limit=50),
+    silently under-reporting once more than 50 runs existed. This
+    endpoint must return a real aggregate count via SQL, not
+    len(one page).
+    """
+    for _ in range(55):
+        run_id = create_agent_run(vertical="dummy", trigger_type="upload")
+        complete_agent_run(run_id, status="completed", confidence=0.9)
+
+    response = client.get("/agent-runs/summary")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 55
+    assert body["completed"] == 55
+
+    # The paginated list endpoint should still only return 50 by
+    # default — confirming the summary endpoint is genuinely doing
+    # its own aggregate query, not just reusing the paginated list.
+    list_response = client.get("/agent-runs")
+    assert len(list_response.json()) == 50
+
+
+def test_agent_run_summary_breaks_down_every_status_including_rejected():
+    run_a = create_agent_run(vertical="dummy", trigger_type="upload")
+    complete_agent_run(run_a, status="completed", confidence=0.9)
+    run_b = create_agent_run(vertical="dummy", trigger_type="upload")
+    complete_agent_run(run_b, status="escalated", confidence=0.4)
+    run_c = create_agent_run(vertical="dummy", trigger_type="upload")
+    complete_agent_run(run_c, status="rejected", confidence=0.4)
+    create_agent_run(vertical="dummy", trigger_type="upload")  # stays 'running'
+
+    response = client.get("/agent-runs/summary")
+    body = response.json()
+
+    assert body["total"] == 4
+    assert body["completed"] == 1
+    assert body["escalated"] == 1
+    assert body["rejected"] == 1
+    assert body["running"] == 1
+    # Every bucket accounted for — no silent gap.
+    assert body["completed"] + body["escalated"] + body["rejected"] + body["running"] == body["total"]
+
+
+def test_agent_run_summary_filters_by_vertical():
+    dummy_run = create_agent_run(vertical="dummy", trigger_type="upload")
+    complete_agent_run(dummy_run, status="completed", confidence=0.9)
+    create_agent_run(vertical="post_incident", trigger_type="upload")
+
+    response = client.get("/agent-runs/summary?vertical=dummy")
+    body = response.json()
+    assert body["total"] == 1
+    assert body["completed"] == 1
+
+
+def test_agent_run_summary_route_is_not_shadowed_by_run_id_route():
+    """
+    Routing-order regression guard: /summary is a literal path
+    segment that could be incorrectly matched by GET /{run_id} (with
+    run_id='summary') if registered in the wrong order. This test
+    would fail with a 422/500 (invalid UUID) instead of 200 if that
+    ordering regressed.
+    """
+    response = client.get("/agent-runs/summary")
+    assert response.status_code == 200
+    assert "total" in response.json()
+
+
+def test_agent_run_summary_empty_is_ok():
+    response = client.get("/agent-runs/summary")
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {"total": 0, "completed": 0, "escalated": 0, "running": 0, "rejected": 0}
+
 
 # ---------------------------------------------------------------
 # /escalations

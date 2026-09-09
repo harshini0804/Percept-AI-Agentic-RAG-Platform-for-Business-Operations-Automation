@@ -1,0 +1,12 @@
+Tom Wilson — Backend Developer | Engineering | Toronto
+
+Tom is a backend developer with 3 years of experience at the company. He is currently focused on the search and recommendations service, having built the initial Elasticsearch integration and the content-based recommendation engine. He is still early in his career but is technically strong and eager to take on more responsibility.
+
+Key contributions:
+- Built the Elasticsearch integration for the product search service (2024 Q3).
+- Implemented the content-based recommendation engine (Python + scikit-learn).
+- Contributed to the backend's test coverage initiative, adding 120 integration tests.
+- Participates actively in code reviews and RFC discussions.
+
+Tom's core skills: Python, FastAPI, Elasticsearch, scikit-learn, SQL.
+Location: Toronto.

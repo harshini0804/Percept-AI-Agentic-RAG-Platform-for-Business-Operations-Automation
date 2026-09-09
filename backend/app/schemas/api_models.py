@@ -31,6 +31,16 @@ class AgentRunDetail(AgentRunSummary):
     # leaderboard for this run. Empty for non-internal-mobility runs.
     role_matches: list["RoleMatchSummary"] = []
 
+class AgentRunStats(BaseModel):
+    """
+    Real aggregate counts across ALL runs needed for the Dashboard's summary cards. 
+    """
+    total: int
+    completed: int
+    escalated: int
+    running: int
+    rejected: int
+
 
 class EscalationSummary(BaseModel):
     id: str

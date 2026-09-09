@@ -76,12 +76,17 @@ function RunDetail() {
         </div>
       )}
 
-      {/* Reasoning panel */}
+            {/* Reasoning panel — falls back to rendering the raw detail
+          JSON when a vertical doesn't use the dummy's simple
+          {content: string} shape (e.g. meeting_action_items logs
+          {verdict, confidence} or {extracted_count, items}). */}
       {reasoningStep && (
         <div className="bg-white rounded shadow p-6 mb-4">
           <h3 className="font-medium mb-2">LLM Reasoning</h3>
           <pre className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 p-3 rounded">
-            {reasoningStep.detail?.content as string}
+            {typeof reasoningStep.detail?.content === "string"
+              ? (reasoningStep.detail.content as string)
+              : JSON.stringify(reasoningStep.detail, null, 2)}
           </pre>
         </div>
       )}

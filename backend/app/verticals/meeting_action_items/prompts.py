@@ -5,14 +5,31 @@ Section 7.2 explicitly lists prompt template(s) as their own vertical
 owner deliverable, kept separate from graph.py's orchestration logic.
 """
 
-EXTRACTION_SYSTEM_PROMPT = """You are analyzing a meeting transcript to extract action items.
+from datetime import date
+
+
+def build_extraction_prompt(today: date) -> str:
+    """
+    EXTRACTION_SYSTEM_PROMPT was previously a static string with no
+    anchor for "today" — meaning relative deadline phrases in a
+    transcript ("by next Friday", "end of this week") had nothing
+    fixed to resolve against, making extraction unreliable. This is
+    now a function so the actual calling date can be injected fresh
+    on every call (see graph.py's _extract_candidate_items).
+    """
+    return f"""You are analyzing a meeting transcript to extract action items.
+
+Today's date is {today.isoformat()}. Use this as the reference point
+for resolving any relative deadline language in the transcript (e.g.
+"by next Friday", "end of this week", "in two weeks") into an actual
+calendar date.
 
 Read the transcript and identify every concrete action item that was
 assigned to a specific person during the meeting.
 
 Respond ONLY with a strict JSON array in this exact shape, no other text:
 [
-  {"description": "<what needs to be done>", "owner": "<first name of the person responsible>", "deadline": "<YYYY-MM-DD, or null if no deadline was mentioned>"}
+  {{"description": "<what needs to be done>", "owner": "<first name of the person responsible>", "deadline": "<YYYY-MM-DD, or null if no deadline was mentioned or it cannot be confidently resolved>"}}
 ]
 
 If no action items were mentioned, respond with an empty array: []
@@ -23,7 +40,11 @@ Rules:
   as they were referred to in the transcript.
 - "description" should be a short, concrete summary of the task, not
   a verbatim quote of the whole discussion around it.
+- "deadline" must be a real calendar date in YYYY-MM-DD format, or
+  null. Never guess a date if the transcript gives no real basis for
+  one — null is always preferable to an invented deadline.
 """
+
 
 FOLLOWUP_VERDICT_PROMPT = """You are checking whether a previously assigned action item has been completed, based on evidence of the owner's recent activity (tickets, commits, follow-up mentions).
 

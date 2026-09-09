@@ -1,0 +1,12 @@
+Ayesha Rao — Senior Backend Engineer | Engineering | Bangalore
+
+Ayesha joined the company 3 years ago as a backend engineer and was promoted to senior after leading the migration of the payment processing pipeline from monolithic REST to event-driven microservices using Kafka. She authored the internal Postgres query performance tuning guide adopted company-wide and has deep production experience with FastAPI, SQLAlchemy, and PostgreSQL.
+
+Key contributions:
+- Led the payment service Kafka migration (2025 Q2), cutting P99 latency from 1.2s to 280ms.
+- Built the shared rate-limiter middleware used by all customer-facing services.
+- On-call for the payments service; authored 3 of the team's runbooks.
+- Mentored two junior engineers through the internal mentorship program.
+
+Ayesha's core skills: Python, FastAPI, PostgreSQL, Kafka, Docker, Terraform, CI/CD.
+Location: Bangalore.

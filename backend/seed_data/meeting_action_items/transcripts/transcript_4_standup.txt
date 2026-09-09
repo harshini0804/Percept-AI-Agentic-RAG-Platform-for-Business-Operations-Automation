@@ -1,0 +1,5 @@
+Daily Standup — March 6th
+
+Morgan will set up the new staging database for the analytics team, since the current one is running out of space.
+
+Alex noted the deployment pipeline fix from earlier this week is holding up well so far, no update needed there.

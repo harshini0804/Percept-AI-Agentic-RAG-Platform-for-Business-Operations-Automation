@@ -109,31 +109,62 @@ def _mark_resolved(action_item_id: str) -> None:
         conn.close()
 
 
-def check_and_act_on_item(item: dict) -> dict:
+def check_and_act_on_item(item: dict) -> dict | None:
     """
-    Runs the full Trigger 2 check for ONE action item: its own
-    agent_run, retrieval, LLM verdict, and the deterministic
-    resolve/nudge/escalate/no-op state machine (Section 8.4):
+    Runs the full Trigger 2 check for ONE action item: retrieval,
+    LLM verdict, and the deterministic resolve/nudge/escalate/no-op
+    state machine (Section 8.4):
 
         verdict == 'done'                       -> mark_resolved
         verdict in (in_progress, no_evidence)
             AND nudge_count == 0                -> send_nudge
             AND nudge_count >= 1 AND not escalated -> escalate_to_manager
             AND already escalated                -> no further action
+
+    Returns None for the "already escalated, still not resolved"
+    no-op case — otherwise this item would spawn a fresh, identical
+    no-op agent_run every single scheduled cycle forever, flooding
+    the Dashboard/Evaluation page with duplicate 'completed' runs
+    that represent nothing actually happening.
+
+    The evidence search + LLM verdict still run EVERY cycle
+    regardless of this — so an already-escalated item can still
+    auto-resolve later if real evidence eventually appears. Only the
+    run/decision LOGGING is skipped when there's genuinely nothing
+    new to record, per Section 8.4's own "no further action" branch
+    for this case (see run_meeting_action_items.py's action_taken
+    handling for the same principle applied to Trigger 1).
     """
     action_item_id = str(item["id"])
     owner = item["owner"]
     description = item["description"]
+
+    evidence = _search_owner_activity(owner, description, str(item["created_at"].date()))
+    verdict_result = _judge_verdict(description, evidence)
+
+    is_noop = (
+        verdict_result["verdict"] != "done"
+        and item["nudge_count"] >= 1
+        and item["escalated"]
+    )
+    if is_noop:
+        print(
+            f"[scheduled followup] item {action_item_id} (owner={owner}): "
+            f"still not done, already escalated — skipping (no run logged)"
+        )
+        return None
 
     run_id = start_run(
         vertical="meeting_action_items",
         trigger_type=TriggerType.SCHEDULED_FOLLOWUP.value,
     )
 
-    evidence = _search_owner_activity(owner, description, str(item["created_at"].date()))
-    log_decision(run_id, "retrieval", {"owner": owner, "num_results": len(evidence)})
-
-    verdict_result = _judge_verdict(description, evidence)
+    top_score = evidence[0]["similarity"] if evidence else None
+    log_decision(
+        run_id,
+        "retrieval",
+        {"owner": owner, "num_results": len(evidence), "top_score": top_score},
+    )
     log_decision(run_id, "llm_reasoning", verdict_result)
 
     action_taken = None
@@ -153,7 +184,9 @@ def check_and_act_on_item(item: dict) -> dict:
             {"run_id": run_id, "action_item_id": action_item_id},
         )
         action_taken = {"action_name": "send_nudge", "result": result}
-    elif not item["escalated"]:
+    else:
+        # not item["escalated"] — the only remaining case, since
+        # is_noop above already filtered out "already escalated".
         result = execute_tool(
             "meeting_action_items",
             "escalate_to_manager",
@@ -164,12 +197,13 @@ def check_and_act_on_item(item: dict) -> dict:
         escalation_reason = (
             f"Action item unresolved after {item['nudge_count']} nudge(s): {description}"
         )
-    # else: already escalated, nudge_count >= 1 -> no further action.
-    # No synthetic decision is logged for this branch — the item's
-    # own row (escalated=True) already tells the full story.
 
-    if action_taken:
-        log_decision(run_id, "action", action_taken)
+    log_decision(run_id, "action", action_taken)
+
+    print(
+        f"[scheduled followup] item {action_item_id} (owner={owner}): "
+        f"verdict={verdict_result['verdict']}, action={action_taken}"
+    )
 
     confidence = verdict_result["confidence"]
     complete_agent_run(
@@ -194,5 +228,12 @@ def run_followup_check() -> dict:
     through the API, it's purely scheduler-driven.
     """
     items = _fetch_overdue_open_items()
-    results = [check_and_act_on_item(item) for item in items]
-    return {"checked": len(items), "results": results}
+    results = []
+    skipped_noop_count = 0
+    for item in items:
+        result = check_and_act_on_item(item)
+        if result is None:
+            skipped_noop_count += 1
+        else:
+            results.append(result)
+    return {"checked": len(items), "processed": len(results), "skipped_noop": skipped_noop_count, "results": results}

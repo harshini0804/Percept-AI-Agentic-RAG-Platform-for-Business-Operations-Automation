@@ -1,0 +1,7 @@
+Product Sync — March 5th
+
+Jamie is going to review the new checkout flow design mockups and share feedback before the next design review. Jamie will review the checkout flow design mockups.
+
+Priya mentioned the customer support team flagged confusing error messages on failed payments. Priya will rewrite the payment error messages to be clearer for customers.
+
+The team agreed the current sprint is on track, no other blockers raised.

@@ -122,7 +122,7 @@ def test_create_incident_ticket(existing_run_id, sample_incident_id):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, run_id, title, linked_incident_ids, status FROM incident_tickets WHERE id = %s;",
+                "SELECT id, run_id, title, linked_incident_ids::text[] AS linked_incident_ids, status FROM incident_tickets WHERE id = %s;",
                 (ticket_id,),
             )
             row = cur.fetchone()
@@ -152,7 +152,7 @@ def test_create_incident_ticket_empty_linked_ids(existing_run_id):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, run_id, title, linked_incident_ids, status FROM incident_tickets WHERE id = %s;",
+                "SELECT id, run_id, title, linked_incident_ids::text[] AS linked_incident_ids, status FROM incident_tickets WHERE id = %s;",
                 (ticket_id,),
             )
             row = cur.fetchone()

@@ -1,0 +1,12 @@
+Anika Desai — Data Engineer | Data Science | Bangalore
+
+Anika is a data engineer with 6 years of experience, 3 at the company. She owns the main analytics data warehouse (Snowflake) and the real-time streaming pipelines (Kafka + Spark). She built the self-serve data catalog used by analysts and PMs, and she maintains the daily revenue reporting pipeline.
+
+Key contributions:
+- Built the real-time streaming pipeline for transaction analytics (Kafka + Spark) (2025 Q1).
+- Designed the Snowflake data warehouse schema used by the analytics team.
+- Built the self-serve data catalog, reducing analyst ticket volume by 40%.
+- Maintains the daily revenue reporting pipeline; zero missed reports in 18 months.
+
+Anika's core skills: Spark, Kafka, Snowflake, dbt, SQL, Python, data modeling.
+Location: Bangalore.

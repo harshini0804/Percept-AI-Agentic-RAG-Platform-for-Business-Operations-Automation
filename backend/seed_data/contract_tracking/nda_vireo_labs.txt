@@ -1,0 +1,30 @@
+MUTUAL NON-DISCLOSURE AGREEMENT
+
+This Mutual Non-Disclosure Agreement is entered into between Vireo Labs Inc.
+and the counterparty identified below, for the sole purpose of facilitating
+discussions regarding a potential business relationship (the "Purpose").
+
+1. Definition of Confidential Information
+"Confidential Information" means any non-public information disclosed by
+either party to the other in connection with the Purpose, whether disclosed
+orally, in writing, or in any other form.
+
+2. Obligations
+Each party agrees to use the other party's Confidential Information solely
+for the Purpose and to protect it using the same degree of care it uses to
+protect its own confidential information of a similar nature.
+
+3. Exclusions
+Confidential Information does not include information that: (a) is or
+becomes publicly available through no fault of the receiving party; (b) was
+rightfully known to the receiving party prior to disclosure; or (c) is
+independently developed without use of the disclosing party's Confidential
+Information.
+
+4. No License
+Nothing in this Agreement grants either party any license or other right to
+the other party's Confidential Information beyond the limited purpose of
+evaluating the Purpose.
+
+5. Governing Law
+This Agreement is governed by the laws of the State of California.

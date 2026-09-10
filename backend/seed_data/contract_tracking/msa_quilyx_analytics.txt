@@ -1,0 +1,32 @@
+MASTER SERVICES AGREEMENT
+
+This Master Services Agreement is entered into between Quilyx Analytics LLC
+("Provider") and the Client identified below.
+
+1. Scope of Services
+Provider shall furnish data analytics services as described in one or more
+Statements of Work executed by the parties from time to time.
+
+2. Performance Standards
+Provider shall use commercially reasonable efforts to meet the performance
+benchmarks generally expected for services of this nature, taking into
+account prevailing industry conditions at the relevant time. Where Provider's
+performance is found to have materially and repeatedly fallen short of such
+expectations, appropriate adjustments may be considered by mutual agreement,
+having regard to the circumstances then prevailing and the extent to which
+any shortfall was attributable to factors outside Provider's reasonable
+control.
+
+3. Confidentiality
+Both parties agree to protect Confidential Information disclosed under this
+Agreement using at least the same degree of care used to protect their own
+confidential information, but in no event less than reasonable care.
+
+4. Term
+This Agreement remains in effect until terminated by either party in
+accordance with the applicable Statement of Work.
+
+5. Dispute Resolution
+Any dispute arising under this Agreement shall first be referred to the
+parties' respective account managers for good-faith resolution before either
+party pursues formal proceedings.

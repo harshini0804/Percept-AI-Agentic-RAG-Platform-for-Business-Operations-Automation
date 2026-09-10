@@ -1,0 +1,34 @@
+SOFTWARE LICENSE AND SUPPORT AGREEMENT
+
+This Software License and Support Agreement is entered into between Halcyon
+Systems Corp. ("Licensor") and the Licensee identified below.
+
+1. Definitions
+For purposes of this Agreement, "Notice Period" shall mean thirty (30)
+calendar days, and "Renewal Date" shall mean the annual anniversary of the
+Effective Date.
+
+2. License Grant
+Licensor grants Licensee a non-exclusive, non-transferable license to use the
+Licensed Software during the Term, subject to the terms of this Agreement.
+
+3. Term and Renewal
+This Agreement shall renew automatically on each Renewal Date unless
+Licensee provides written notice of non-renewal within the Notice Period
+described in Section 1, delivered prior to the applicable Renewal Date.
+
+4. Support and Maintenance
+Licensor shall provide standard support services during the Term, including
+bug fixes and security patches, at no additional cost to Licensee.
+
+5. Fees
+Licensee shall pay the annual license fee set forth in the Order Form within
+forty-five (45) days of the Renewal Date referenced in Section 3.
+
+6. Termination for Breach
+Either party may terminate this Agreement immediately upon written notice if
+the other party materially breaches this Agreement and fails to cure such
+breach within the Notice Period defined in Section 1.
+
+7. Governing Law
+This Agreement is governed by the laws of the State of New York.

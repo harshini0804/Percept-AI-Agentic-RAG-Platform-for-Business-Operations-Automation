@@ -360,3 +360,81 @@ def test_scheduled_ingestion_trigger_type_is_logged_on_the_run(monkeypatch):
     finally:
         conn.close()
     assert row["trigger_type"] == "scheduled_ingestion"
+
+
+def test_mid_contract_failure_closes_out_run_as_escalated_not_stuck_running(monkeypatch):
+    """
+    Reproduces a real failure observed during seeding: clause 3 of 3
+    raises (e.g. a rate-limited LLM call) after clauses 1-2 already
+    succeeded and fired real actions. The run must close out as
+    escalated — crediting the real work already done — rather than
+    propagating the exception and leaving agent_runs permanently
+    stuck at status='running' with no record of what happened.
+    """
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.chunking.call_llm",
+        _chunk_response(
+            ("1", "Renewal", "Clause one, a clean renewal obligation."),
+            ("2", "Termination", "Clause two, a clean termination obligation."),
+            ("3", "Confidentiality", "Clause three, never gets extracted."),
+        ),
+    )
+
+    call_count = {"n": 0}
+
+    def fake_call_llm(**kwargs):
+        call_count["n"] += 1
+        if call_count["n"] <= 2:
+            responses = [
+                {
+                    "has_obligation": True, "description": f"Obligation {call_count['n']}",
+                    "raw_date_or_condition": "30 days", "references_other_section": "",
+                    "unusual_wording": False, "confidence": 0.95,
+                },
+            ]
+            return {"content": json.dumps(responses[0]), "tool_calls": []}
+        raise RuntimeError("Error code: 429 - rate_limit_exceeded")
+
+    monkeypatch.setattr("app.verticals.contract_tracking.graph.call_llm", fake_call_llm)
+
+    agent_input = AgentRunInput(
+        vertical="contract_tracking",
+        trigger_type=TriggerType.UPLOAD,
+        input_payload={"text": "1. Renewal...\n2. Termination...\n3. Confidentiality..."},
+    )
+    output = run_contract_tracking_vertical(agent_input)  # must NOT raise
+
+    # The run closed out — status is a real terminal state, not stuck.
+    assert output.status == "escalated"
+    assert output.escalated is True
+
+    # The two obligations that succeeded before the failure are still
+    # credited as real actions — not discarded.
+    assert len(output.actions_taken) == 2
+    assert all(a.action_name == "create_calendar_reminder" for a in output.actions_taken)
+
+    # The escalation reason names the failed clause and flags clause
+    # 3 as unprocessed, so a human reviewing it knows exactly what's
+    # missing.
+    assert any("clause 3" in e for e in [output.escalation_reason or ""])
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT status FROM agent_runs WHERE id = %s;", (output.run_id,))
+            run_row = cur.fetchone()
+            cur.execute(
+                "SELECT reason FROM escalations WHERE run_id = %s AND pending_action IS NULL;",
+                (output.run_id,),
+            )
+            escalation_row = cur.fetchone()
+    finally:
+        conn.close()
+
+    # Confirms the DB row itself closed out — this is the exact bug
+    # being fixed: previously this row would be permanently stuck at
+    # status='running'.
+    assert run_row["status"] == "escalated"
+    assert escalation_row is not None
+    assert "429" in escalation_row["reason"] or "rate_limit" in escalation_row["reason"]
+

@@ -1,0 +1,34 @@
+VENDOR SERVICES AGREEMENT
+
+This Vendor Services Agreement ("Agreement") is entered into by and between
+Northbridge Cloud Storage Inc. ("Vendor") and the Client identified in the
+signature block below.
+
+1. Term and Renewal
+This Agreement shall commence on the Effective Date and continue for a period
+of twelve (12) months. Thereafter, this Agreement shall automatically renew
+for successive twelve (12) month periods unless either party provides written
+notice of non-renewal at least sixty (60) days prior to the end of the then-
+current term.
+
+2. Termination for Convenience
+Either party may terminate this Agreement for convenience upon ninety (90)
+days' prior written notice to the other party.
+
+3. Confidentiality
+Each party shall maintain the confidentiality of the other party's
+Confidential Information and shall not disclose such information to any
+third party without prior written consent, except as required by law.
+
+4. Fees and Payment
+Client shall pay Vendor the fees set forth in Exhibit A within thirty (30)
+days of the invoice date. Late payments shall accrue interest at a rate of
+1.5% per month.
+
+5. Limitation of Liability
+Neither party shall be liable to the other for any indirect, incidental, or
+consequential damages arising out of or related to this Agreement.
+
+6. Governing Law
+This Agreement shall be governed by and construed in accordance with the laws
+of the State of Delaware, without regard to its conflict of laws principles.

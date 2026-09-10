@@ -29,7 +29,7 @@ hardcoded, so they can be adjusted without a code change/redeploy.
 import os
 
 from app.core.llm_gateway import call_llm
-from app.core.logging_service import log_decision, complete_agent_run
+from app.core.logging_service import log_decision, complete_agent_run, create_escalation
 from app.core.tool_registry import execute_tool
 from app.core.db import get_connection
 from app.core.documents import resolve_document_text
@@ -299,7 +299,36 @@ def run_contract_tracking_vertical(agent_input: AgentRunInput) -> AgentRunOutput
     clauses = split_contract_into_clauses(contract_text)
     log_decision(run_id, "retrieval", {"clause_count": len(clauses)})
 
-    clause_results = [_process_clause(run_id, contract_id, clause) for clause in clauses]
+    # Explicit loop, not a list comprehension: if _process_clause
+    # raises partway through (e.g. a rate-limited LLM call on clause
+    # 4 of 7), clauses 0-3 may already have created real obligations
+    # and fired real create_calendar_reminder actions — those are
+    # genuine, correct work already done and must not be discarded.
+    # But without this try/except, the exception would propagate out
+    # of run_contract_tracking_vertical() entirely, skipping
+    # complete_agent_run() and leaving the run permanently stuck at
+    # status='running' with no record of why, even though real work
+    # already happened. Caught here, the run instead closes out as
+    # escalated, crediting whatever succeeded and flagging the
+    # unprocessed remainder for a human — a partial failure becomes
+    # a visible, actionable HITL item instead of a silent stuck run.
+    clause_results = []
+    partial_failure = None
+    for i, clause in enumerate(clauses):
+        try:
+            clause_results.append(_process_clause(run_id, contract_id, clause))
+        except Exception as e:
+            unprocessed = [c["clause_number"] for c in clauses[i:]]
+            partial_failure = {
+                "failed_clause_number": clause["clause_number"],
+                "unprocessed_clause_numbers": unprocessed,
+                "error": str(e),
+            }
+            log_decision(run_id, "escalation", {
+                "reason": "processing_failed_partway_through_contract",
+                **partial_failure,
+            })
+            break
 
     actions_taken = [
         {
@@ -315,6 +344,17 @@ def run_contract_tracking_vertical(agent_input: AgentRunInput) -> AgentRunOutput
         for r in clause_results
         if r["action"] == "escalated"
     ]
+
+    if partial_failure:
+        reason = (
+            f"Processing failed at clause {partial_failure['failed_clause_number']} "
+            f"({partial_failure['error']}). Clause(s) "
+            f"{', '.join(partial_failure['unprocessed_clause_numbers'])} were never "
+            f"processed and need manual review. Obligations already found in this "
+            f"contract before the failure were still acted on normally."
+        )
+        create_escalation(run_id=run_id, reason=reason, pending_action=None)
+        escalations.append({"reason": reason})
 
     obligation_confidences = [
         r for r in clause_results if r["has_obligation"]

@@ -1,6 +1,7 @@
 """
-Tests for seed.py's internal_mobility structured seeding
-(Section 8.2 + seed_internal_mobility in backend/seed.py).
+Tests for app.verticals.internal_mobility.seed_local structured seeding
+(Section 8.2 + seed_internal_mobility in the internal_mobility seed_local
+module, wired into backend/seed.py).
 
 Two layers:
   1. Pure manifest sanity checks — no DB, catches an accidentally
@@ -16,15 +17,12 @@ Two layers:
 import json
 
 from app.core.db import get_connection
+from app.verticals.internal_mobility.seed_local import (
+    seed_internal_mobility,
+    SEED_DATA_ROOT,
+)
 
-import sys
-import pathlib
-
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-
-import seed  # noqa: E402
-
-MANIFEST_PATH = seed.SEED_DATA_ROOT / "internal_mobility" / "employees.json"
+MANIFEST_PATH = SEED_DATA_ROOT / "employees.json"
 
 
 def _load_manifest() -> dict:
@@ -59,9 +57,9 @@ def test_seed_internal_mobility_populates_relational_tables(monkeypatch):
     # Avoid loading the embedding model in this unit test — only the
     # DB writes matter here. The graph/integration tests exercise the
     # real embed path.
-    monkeypatch.setattr(seed, "upsert_embedding", lambda **kwargs: None)
+    monkeypatch.setattr("app.verticals.internal_mobility.seed_local.upsert_embedding", lambda **kwargs: None)
 
-    seed.seed_internal_mobility()
+    seed_internal_mobility()
 
     conn = get_connection()
     try:
@@ -84,10 +82,10 @@ def test_seed_internal_mobility_idempotent(monkeypatch):
     """Re-running must not duplicate relational rows (the embeddings
     existence check is analogous: source_id-scoped, so it also stays
     idempotent against the real DB)."""
-    monkeypatch.setattr(seed, "upsert_embedding", lambda **kwargs: None)
+    monkeypatch.setattr("app.verticals.internal_mobility.seed_local.upsert_embedding", lambda **kwargs: None)
 
-    seed.seed_internal_mobility()
-    seed.seed_internal_mobility()
+    seed_internal_mobility()
+    seed_internal_mobility()
 
     conn = get_connection()
     try:

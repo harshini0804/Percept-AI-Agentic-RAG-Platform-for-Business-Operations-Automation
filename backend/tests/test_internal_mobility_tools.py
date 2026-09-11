@@ -13,6 +13,8 @@ from app.verticals.internal_mobility.tools import (
     record_role_match,
     check_capacity,
     notify_candidate,
+    _employee_email,
+    _resolve_recipient,
 )
 
 
@@ -112,6 +114,31 @@ def test_check_capacity_returns_not_found_for_unknown_employee():
     assert result["available"] is None
 
 
+def test_resolve_recipient_fails_loudly_for_missing_employee():
+    with pytest.raises(ValueError, match="cannot derive a recipient email"):
+        _resolve_recipient("00000000-0000-0000-0000-000000000000")
+
+
+def test_employee_email_sanitizes_name():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO employees (name, department, years_experience, location, profile_text)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id;
+                """,
+                ("O'Brien  García", "Engineering", 5, "Bangalore", "Backend engineer."),
+            )
+            tricky_id = str(cur.fetchone()["id"])
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert _employee_email(tricky_id) == "o.brien.garcia@example.com"
+
+
 def test_notify_candidate_creates_match_and_notification(employee_id, role_id):
     run_id = create_agent_run(vertical="internal_mobility", trigger_type="upload")
 
@@ -155,7 +182,7 @@ def test_notify_candidate_creates_match_and_notification(employee_id, role_id):
     assert match["notified"] is True
 
     assert note is not None
-    assert note["recipient"] == employee_id
+    assert note["recipient"] == "ayesha.rao@example.com"
     assert note["message"] == "Great fit for Staff Backend Engineer — apply!"
 
 

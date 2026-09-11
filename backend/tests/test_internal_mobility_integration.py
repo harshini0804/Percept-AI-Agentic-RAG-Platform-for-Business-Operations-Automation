@@ -135,7 +135,7 @@ def test_internal_mobility_notifies_confident_available_candidate(monkeypatch):
     assert match is not None
     assert match["notified"] is True
     assert note is not None
-    assert note["recipient"] == emp_id
+    assert note["recipient"] == "ayesha.rao@example.com"
 
 
 def test_internal_mobility_leaves_low_confidence_candidate_unnotified(monkeypatch):
@@ -302,3 +302,84 @@ def test_internal_mobility_escalates_when_ranking_is_empty(monkeypatch):
     assert output.status == "escalated"
     assert output.escalated is True
     assert output.escalation_reason is not None
+
+
+def test_internal_mobility_logs_single_retrieval_decision_with_real_results(monkeypatch):
+    """The dashboard reads the first step_type == 'retrieval' decision; the
+    pre-filter stub previously masked the real search numbers with
+    num_results=0. Now a successful search logs exactly one retrieval
+    decision carrying the actual top_score / num_results."""
+    emp_id = _seed_engineer()
+
+    fake_llm = _fake_llm_scripted(
+        requirements={"department": "Engineering", "min_experience": 3,
+                      "query_text": "backend engineer python postgres"},
+        ranking_content=json.dumps({
+            "summary": "One strong candidate.",
+            "candidates": [
+                {"employee_id": emp_id, "rank": 1,
+                 "rationale": "Deep backend fit.",
+                 "skill_gaps": [], "confidence": 0.9},
+            ],
+        }),
+    )
+    monkeypatch.setattr("app.verticals.internal_mobility.graph.call_llm", fake_llm)
+
+    output = run_internal_mobility_vertical(AgentRunInput(
+        vertical="internal_mobility",
+        trigger_type=TriggerType.UPLOAD,
+        input_payload={"text": "Staff Backend Engineer, Python PostgreSQL Kafka."},
+    ))
+
+    assert output.status == "completed"
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT detail FROM agent_decisions "
+                "WHERE run_id = %s AND step_type = 'retrieval' ORDER BY created_at;",
+                (output.run_id,),
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    assert len(rows) == 1
+    detail = rows[0]["detail"]
+    assert detail["num_results"] >= 1
+    assert detail["top_score"] is not None
+    assert detail["top_score"] > 0
+
+
+def test_internal_mobility_sanitizes_recipient_email(monkeypatch):
+    emp_id = _seed_engineer(name="O'Brien  García")
+
+    fake_llm = _fake_llm_scripted(
+        requirements={"department": "Engineering", "min_experience": 3,
+                      "query_text": "backend engineer"},
+        ranking_content=json.dumps({
+            "summary": "One strong candidate.",
+            "candidates": [
+                {"employee_id": emp_id, "rank": 1,
+                 "rationale": "Deep backend fit.",
+                 "skill_gaps": [], "confidence": 0.95},
+            ],
+        }),
+    )
+    monkeypatch.setattr("app.verticals.internal_mobility.graph.call_llm", fake_llm)
+
+    output = run_internal_mobility_vertical(AgentRunInput(
+        vertical="internal_mobility",
+        trigger_type=TriggerType.UPLOAD,
+        input_payload={"text": "Staff Backend Engineer."},
+    ))
+
+    assert output.status == "completed"
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT recipient FROM notifications WHERE run_id = %s;", (output.run_id,))
+            note = cur.fetchone()
+    finally:
+        conn.close()
+    assert note is not None
+    assert note["recipient"] == "o.brien.garcia@example.com"

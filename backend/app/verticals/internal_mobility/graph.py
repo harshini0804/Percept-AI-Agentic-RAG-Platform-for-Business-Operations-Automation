@@ -257,21 +257,20 @@ def retrieve_node(state: InternalMobilityAgentState) -> InternalMobilityAgentSta
     employee_ids = _prefilter_employee_ids(req["department"], req["min_experience"])
     state["prefiltered_employee_ids"] = employee_ids
 
-    log_decision(
-        state["run_id"],
-        "retrieval",
-        {
-            "top_score": None,
-            "num_results": 0,
-            "retried": False,
-            "prefiltered_pool_size": len(employee_ids),
-            "department_filter": req["department"],
-            "min_experience_filter": req["min_experience"],
-            "note": "Structural pre-filter returned no candidates; semantic search skipped.",
-        },
-    )
-
     if not employee_ids:
+        log_decision(
+            state["run_id"],
+            "retrieval",
+            {
+                "top_score": None,
+                "num_results": 0,
+                "retried": False,
+                "prefiltered_pool_size": 0,
+                "department_filter": req["department"],
+                "min_experience_filter": req["min_experience"],
+                "note": "Structural pre-filter returned no candidates; semantic search skipped.",
+            },
+        )
         state["retrieval_results"] = []
         state["retrieval_retried"] = False
         return state

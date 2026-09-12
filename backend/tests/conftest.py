@@ -51,13 +51,17 @@ TABLES_IN_DELETE_ORDER = [
     "employee_workload",
     "obligations",
     "action_items",
+    # contracts.run_id references agent_runs(id) (Section 8.3: added
+    # so the report view can join obligations back to the run that
+    # created them) — contracts must be deleted before agent_runs,
+    # not after, or this DELETE loop hits a ForeignKeyViolation.
+    "contracts",
     "agent_runs",
     "embeddings",
     "kb_sync_state",
     "incidents",
     "employees",
     "roles",
-    "contracts",
     "meetings",
     "documents",
 ]

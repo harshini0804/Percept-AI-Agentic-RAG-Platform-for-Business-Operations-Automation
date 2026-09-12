@@ -70,6 +70,48 @@ def test_list_and_get_agent_run():
     assert body["decisions"] == []
 
 
+def test_agent_run_detail_includes_obligations_for_contract_tracking_run():
+    from app.core.db import get_connection
+
+    run_id = create_agent_run(vertical="contract_tracking", trigger_type="upload")
+    complete_agent_run(run_id, status="completed", confidence=0.9)
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO contracts (run_id, vendor_name) VALUES (%s, %s) RETURNING id;",
+                (run_id, "Acme Vendor Co"),
+            )
+            contract_id = cur.fetchone()["id"]
+            cur.execute(
+                """
+                INSERT INTO obligations (contract_id, description, confidence, reminder_created)
+                VALUES (%s, %s, %s, %s);
+                """,
+                (contract_id, "Renew within 30 days", 0.95, True),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.get(f"/agent-runs/{run_id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["obligations"]) == 1
+    assert body["obligations"][0]["description"] == "Renew within 30 days"
+    assert body["obligations"][0]["reminder_created"] is True
+
+
+def test_agent_run_detail_obligations_empty_for_other_verticals():
+    run_id = create_agent_run(vertical="dummy", trigger_type="upload")
+    complete_agent_run(run_id, status="completed", confidence=0.9)
+
+    response = client.get(f"/agent-runs/{run_id}")
+    assert response.status_code == 200
+    assert response.json()["obligations"] == []
+
+
 def test_get_nonexistent_agent_run_returns_404():
     import uuid
 

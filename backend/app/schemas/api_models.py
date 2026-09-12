@@ -30,6 +30,10 @@ class AgentRunDetail(AgentRunSummary):
     # Vertical 2 (internal_mobility, Section 8.2): the ranked candidate
     # leaderboard for this run. Empty for non-internal-mobility runs.
     role_matches: list["RoleMatchSummary"] = []
+    # Vertical 3 (contract_tracking, Section 8.3): every obligation
+    # extracted from this run's contract. Empty for non-contract-
+    # tracking runs.
+    obligations: list["ObligationSummary"] = []
 
 class AgentRunStats(BaseModel):
     """
@@ -80,6 +84,19 @@ class RoleMatchSummary(BaseModel):
     confidence: float
     notified: bool
     utilization_pct: Optional[int] = None
+
+
+class ObligationSummary(BaseModel):
+    """One extracted obligation from a contract (Vertical 3, Section
+    8.3) — the structured timeline/table the report view renders,
+    ordered by confidence so the items most likely to need a second
+    look surface alongside the auto-reminded ones."""
+    id: str
+    description: str
+    obligation_date: Optional[date] = None
+    type: Optional[str] = None
+    confidence: Optional[float] = None
+    reminder_created: bool
 
 class ActionItemTrackerEntry(BaseModel):
     """

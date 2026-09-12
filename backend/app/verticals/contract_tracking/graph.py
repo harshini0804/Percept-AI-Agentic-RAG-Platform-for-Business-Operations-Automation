@@ -152,13 +152,13 @@ def _insert_obligation(contract_id: str, extraction: dict) -> str:
         conn.close()
 
 
-def _insert_contract(vendor_name: str | None, doc_id: str | None) -> str:
+def _insert_contract(vendor_name: str | None, doc_id: str | None, run_id: str) -> str:
     conn = get_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO contracts (doc_id, vendor_name) VALUES (%s, %s) RETURNING id;",
-                (doc_id, vendor_name),
+                "INSERT INTO contracts (doc_id, vendor_name, run_id) VALUES (%s, %s, %s) RETURNING id;",
+                (doc_id, vendor_name, run_id),
             )
             contract_id = cur.fetchone()["id"]
         conn.commit()
@@ -294,7 +294,7 @@ def run_contract_tracking_vertical(agent_input: AgentRunInput) -> AgentRunOutput
         input_document_id=agent_input.input_document_id,
     )
 
-    contract_id = _insert_contract(vendor_name=None, doc_id=doc_id)
+    contract_id = _insert_contract(vendor_name=None, doc_id=doc_id, run_id=run_id)
 
     clauses = split_contract_into_clauses(contract_text)
     log_decision(run_id, "retrieval", {"clause_count": len(clauses)})

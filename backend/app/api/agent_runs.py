@@ -6,7 +6,14 @@ Report/Result viewer shared UI screens (Section 5).
 from fastapi import APIRouter, HTTPException, Query
 from app.core.db import get_connection
 
-from app.schemas.api_models import AgentRunSummary, AgentRunDetail, AgentDecisionDetail, AgentRunStats, RoleMatchSummary
+from app.schemas.api_models import (
+    AgentRunSummary,
+    AgentRunDetail,
+    AgentDecisionDetail,
+    AgentRunStats,
+    RoleMatchSummary,
+    ObligationSummary,
+)
 
 router = APIRouter(prefix="/agent-runs", tags=["agent-runs"])
 
@@ -129,10 +136,36 @@ def get_agent_run(run_id: str):
             )
             role_matches = [RoleMatchSummary(**d) for d in cur.fetchall()]
 
+            # Vertical 3 (contract_tracking, Section 8.3): every
+            # obligation extracted from this run's contract, joined
+            # through contracts.run_id (added specifically so this
+            # query is possible — obligations link to a contract, not
+            # directly to a run, and one contract row belongs to
+            # exactly one run in this pipeline). Always empty for
+            # non-contract-tracking runs.
+            cur.execute(
+                """
+                SELECT
+                    o.id,
+                    o.description,
+                    o.obligation_date,
+                    o.type,
+                    o.confidence,
+                    o.reminder_created
+                FROM obligations o
+                JOIN contracts c ON c.id = o.contract_id
+                WHERE c.run_id = %s
+                ORDER BY o.confidence DESC;
+                """,
+                (run_id,),
+            )
+            obligations = [ObligationSummary(**d) for d in cur.fetchall()]
+
             return AgentRunDetail(
                 **run,
                 decisions=[AgentDecisionDetail(**d) for d in decisions],
                 role_matches=role_matches,
+                obligations=obligations,
             )
     finally:
         conn.close()

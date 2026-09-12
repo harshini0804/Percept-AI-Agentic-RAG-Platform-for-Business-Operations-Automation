@@ -166,6 +166,7 @@ CREATE TABLE employee_workload (
 CREATE TABLE contracts (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     doc_id          UUID REFERENCES documents(id),
+    run_id          UUID REFERENCES agent_runs(id),
     uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     vendor_name     TEXT
 );

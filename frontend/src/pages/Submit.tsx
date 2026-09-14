@@ -5,12 +5,15 @@ import { Paperclip, X, ArrowUp, FileText } from "lucide-react";
 import { submitRun, submitRunWithFile } from "../api/agentRuns";
 
 // Registered verticals (Section 7, point 11): "dummy" proves the shared
-// core, and internal_mobility (Vertical 2, Section 8.2) matches employee
-// profiles to a posted role with a ranked leaderboard on the result page.
+// core, internal_mobility (Vertical 2, Section 8.2) matches employee
+// profiles to a posted role with a ranked leaderboard on the result page,
+// and contract_tracking (Vertical 3, Section 8.3) extracts date-bound
+// obligations from a contract into a structured timeline.
 const AVAILABLE_VERTICALS = [
   { value: "dummy", label: "Dummy (test vertical)" },
   { value: "internal_mobility", label: "Internal Mobility & Skill-Gap Matching" },
   { value: "meeting_action_items", label: "Meeting Action Items" },
+  { value: "contract_tracking", label: "Contract Obligation & Renewal Tracking" },
 ];
 
 function Submit() {

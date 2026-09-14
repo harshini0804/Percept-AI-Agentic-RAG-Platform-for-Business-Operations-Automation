@@ -41,6 +41,23 @@ function CapacityBadge({ utilization }: { utilization: number | null }) {
   );
 }
 
+// Vertical 3 reminder badge (Section 8.3): whether this specific
+// obligation was auto-scheduled (confidence cleared the action
+// threshold) or flagged for manual review — a single contract can
+// have both outcomes among its obligations, so this is per-row, not
+// a run-level status.
+function ReminderBadge({ created }: { created: boolean }) {
+  return created ? (
+    <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+      Reminder set
+    </span>
+  ) : (
+    <span className="px-2 py-1 rounded text-xs font-medium bg-amber-100 text-amber-800">
+      Needs review
+    </span>
+  );
+}
+
 function RunDetail() {
   const { runId } = useParams<{ runId: string }>();
 
@@ -150,6 +167,38 @@ function RunDetail() {
                 </div>
                 {m.rationale && (
                   <p className="text-sm text-slate-700 mt-1">{m.rationale}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Contract obligation timeline (Vertical 3, Section 8.3): a
+          structured table, not a single reasoning/action panel — one
+          contract can have several obligations, each independently
+          auto-scheduled or flagged (Section 8.3, Agentic Decision
+          Points), so this renders every obligation from the run, not
+          just the first decision of a given step_type the way the
+          generic panels above do. */}
+      {run.vertical === "contract_tracking" && run.obligations.length > 0 && (
+        <div className="bg-white rounded shadow p-6 mb-4">
+          <h3 className="font-medium mb-3">Extracted Obligations</h3>
+          <div className="space-y-3">
+            {run.obligations.map((o) => (
+              <div key={o.id} className="border border-slate-200 rounded-lg p-3">
+                <div className="flex items-center gap-3 mb-1 flex-wrap">
+                  <span className="font-medium">{o.description}</span>
+                  {o.type && (
+                    <span className="text-xs text-slate-500">{o.type}</span>
+                  )}
+                  <ConfidenceBadge confidence={o.confidence} />
+                  <ReminderBadge created={o.reminder_created} />
+                </div>
+                {o.obligation_date && (
+                  <p className="text-sm text-slate-500 mt-1">
+                    Due: {new Date(o.obligation_date).toLocaleDateString()}
+                  </p>
                 )}
               </div>
             ))}

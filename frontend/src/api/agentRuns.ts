@@ -19,6 +19,7 @@ export interface AgentDecisionDetail {
 export interface AgentRunDetail extends AgentRunSummary {
   decisions: AgentDecisionDetail[];
   role_matches: RoleMatchSummary[];
+  obligations: ObligationSummary[];
 }
 
 export interface RoleMatchSummary {
@@ -30,6 +31,15 @@ export interface RoleMatchSummary {
   confidence: number;
   notified: boolean;
   utilization_pct: number | null;
+}
+
+export interface ObligationSummary {
+  id: string;
+  description: string;
+  obligation_date: string | null;
+  type: string | null;
+  confidence: number | null;
+  reminder_created: boolean;
 }
 
 export interface AgentRunStats {

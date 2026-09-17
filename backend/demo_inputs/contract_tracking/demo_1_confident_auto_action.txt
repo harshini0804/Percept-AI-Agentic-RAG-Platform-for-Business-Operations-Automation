@@ -1,0 +1,34 @@
+SAAS SUBSCRIPTION AGREEMENT
+
+This SaaS Subscription Agreement is entered into between Nexora
+Cloud Inc. ("Provider") and the Client identified below.
+
+1. Subscription Term
+This Agreement commences on the Effective Date and continues for
+twelve (12) months. It renews automatically for successive twelve
+(12) month terms unless either party provides written notice of
+non-renewal at least sixty (60) days before the end of the
+then-current term.
+
+2. Termination for Convenience
+Either party may terminate this Agreement for convenience upon
+thirty (30) days' prior written notice to the other party.
+
+3. Payment Terms
+Client shall pay the annual subscription fee within fourteen (14)
+days of the invoice date. Invoices unpaid after fourteen (14) days
+shall accrue interest at 1.5% per month.
+
+4. Data Deletion on Termination
+Upon termination or expiry of this Agreement, Provider shall
+permanently delete all Client data within thirty (30) days of the
+termination date, and provide written confirmation of deletion upon
+Client's request.
+
+5. Intellectual Property
+All intellectual property rights in the Provider's platform remain
+with Provider. Client receives a limited, non-exclusive license to
+use the platform during the Subscription Term only.
+
+6. Governing Law
+This Agreement is governed by the laws of the State of Texas.

@@ -1,0 +1,45 @@
+IT OUTSOURCING SERVICES AGREEMENT
+
+This IT Outsourcing Services Agreement is entered into between
+Pinnacle Systems Group Ltd. ("Service Provider") and the Client
+identified in the signature block below.
+
+1. Initial Term
+This Agreement commences on the Effective Date and continues for
+a period of thirty-six (36) months. Upon expiry of the initial
+term, this Agreement shall automatically renew for successive
+twelve (12) month periods unless either party delivers written
+notice of non-renewal at least ninety (90) days before the end
+of the then-current term.
+
+2. Termination for Cause
+Either party may terminate this Agreement immediately by written
+notice if the other party commits a material breach and fails to
+cure that breach within twenty-one (21) days after receiving
+written notice specifying the breach in reasonable detail.
+
+3. Transition Assistance
+Upon notice of termination or non-renewal for any reason, Service
+Provider shall provide transition assistance for a period of up to
+sixty (60) days from the termination date, at Client's written
+request. Client shall pay Service Provider's then-current time
+and materials rates for all transition assistance provided.
+
+4. Monthly Invoicing
+Service Provider shall issue invoices on the first business day
+of each calendar month. Client shall pay each invoice within
+twenty-eight (28) days of the invoice date.
+
+5. Software License Compliance
+Client shall notify Service Provider within fourteen (14) days
+of discovering any potential software license compliance issue
+arising from the services provided under this Agreement.
+
+6. Limitation of Liability
+Neither party's aggregate liability under this Agreement shall
+exceed the total fees paid by Client in the twelve (12) months
+immediately preceding the event giving rise to the claim.
+
+7. Governing Law
+This Agreement is governed by the laws of the State of Georgia,
+United States of America.

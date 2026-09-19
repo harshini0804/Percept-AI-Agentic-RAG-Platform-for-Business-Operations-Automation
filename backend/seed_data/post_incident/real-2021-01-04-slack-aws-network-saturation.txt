@@ -1,0 +1,37 @@
+# Incident: AWS Transit Gateway Packet Loss — Cascading Connection Failures
+Date: 2021-01-04
+Service: slack-infrastructure
+Severity: P1
+Root Cause Tag: network-saturation
+
+## Summary
+Network saturation in AWS's transit gateways caused packet loss for Slack's infrastructure. When Slack attempted to scale up to compensate for the degraded performance, the additional instances amplified the load on the already saturated network path, making the situation worse. Users experienced inability to send messages, load channels, or connect to Slack for approximately 2 hours.
+
+## Timeline
+- 06:00 UTC — Users report intermittent connectivity issues; latency spikes observed
+- 06:15 UTC — Monitoring shows elevated packet loss on AWS transit gateways
+- 06:30 UTC — Auto-scaling triggers, adding new instances to handle load
+- 06:45 UTC — New instances increase network traffic, worsening packet loss
+- 07:00 UTC — Engineering disables auto-scaling; begins manual traffic management
+- 07:30 UTC — Traffic rerouted to less saturated network paths
+- 08:05 UTC — Full service recovery confirmed
+
+## Root Cause
+Slack's infrastructure routes traffic through AWS transit gateways which experienced network saturation during a period of unusually high post-holiday return-to-work traffic. The saturation caused packet loss, which in turn caused connection timeouts and retries. Slack's auto-scaling system responded to the elevated error rates by provisioning additional instances, but these new instances generated additional network traffic through the same saturated transit gateways, creating a positive feedback loop that amplified the congestion.
+
+## Impact
+- ~2 hours of degraded to unavailable service for Slack users globally
+- Users unable to send or receive messages, load channels, or make API calls
+- Workspace administrators and bot integrations also affected
+- Significant productivity impact during a peak return-to-work period after holidays
+
+## Mitigation
+- Immediate: disabled auto-scaling to stop amplification; manually rerouted traffic
+- Short-term: identified and relieved the saturated transit gateway paths
+- Long-term: implemented network-aware scaling policies that check transit gateway utilization before adding capacity; diversified network paths to avoid single-gateway bottlenecks
+
+## Lessons Learned
+1. Auto-scaling can amplify network-layer problems — scaling policies must be network-aware, not just CPU/request-aware.
+2. Transit gateway saturation should have its own alerts and circuit breakers, separate from application-level monitoring.
+3. Post-holiday traffic spikes are predictable — capacity planning must account for return-to-work surges.
+4. Positive feedback loops (more instances → more traffic → more saturation → more errors → more instances) are a critical anti-pattern to guard against.

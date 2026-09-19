@@ -1,0 +1,38 @@
+# Incident: Transit Gateway Saturation Plus Auto-Scaling Amplification
+Date: 2021-01-04
+Service: slack-platform
+Severity: P0
+Root Cause Tag: network-saturation
+
+## Summary
+Slack experienced a major outage when AWS Transit Gateway bandwidth saturation combined with auto-scaling amplification to create a cascading failure. The initial network saturation triggered auto-scaling, which created more instances that generated more network traffic, further saturating the transit gateway in a positive feedback loop.
+
+## Timeline
+- 14:45 UTC — Transit Gateway bandwidth approaches saturation
+- 14:50 UTC — Packet loss causes service degradation
+- 14:55 UTC — Auto-scaling triggers, launching new instances
+- 15:00 UTC — New instances increase network traffic, worsening saturation
+- 15:15 UTC — Positive feedback loop recognized; auto-scaling disabled
+- 15:30 UTC — Traffic engineering applied to redistribute load
+- 16:00 UTC — Transit Gateway bandwidth redistributed
+- 17:00 UTC — Full service recovery
+
+## Root Cause
+Slack's AWS architecture routes inter-VPC traffic through AWS Transit Gateways, which have bandwidth limits. As traffic grew, the Transit Gateway bandwidth utilization approached its limit. Packet loss from saturation caused service health checks to fail, triggering auto-scaling to launch additional instances. These new instances generated their own health check traffic, service discovery queries, and initialization traffic — all routed through the same saturated Transit Gateway. This created a positive feedback loop where scaling out to fix the problem made it worse.
+
+## Impact
+- ~2+ hours of Slack platform degradation and partial outage
+- Messages delayed or failed to send
+- Channels and DMs intermittently unavailable
+- Enterprise customers unable to use Slack for business communication
+
+## Mitigation
+- Immediate: disabled auto-scaling to break the feedback loop; manually reduced instance count
+- Short-term: redistributed traffic across multiple Transit Gateways
+- Long-term: implemented Transit Gateway bandwidth monitoring with pre-saturation alerts; redesigned auto-scaling to account for network bandwidth constraints
+
+## Lessons Learned
+1. Auto-scaling can amplify network saturation instead of fixing it — scaling decisions must consider network bandwidth.
+2. Transit Gateway bandwidth is a finite resource that must be monitored like CPU or memory.
+3. Positive feedback loops between auto-scaling and resource saturation are a common failure pattern.
+4. Network infrastructure capacity must be factored into auto-scaling policies.

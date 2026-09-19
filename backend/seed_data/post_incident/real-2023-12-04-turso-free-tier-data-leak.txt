@@ -1,0 +1,36 @@
+# Incident: Misconfigured DB Backup IDs Cause Data Leak and Loss
+Date: 2023-12-04
+Service: turso-database
+Severity: P0
+Root Cause Tag: misconfigured-identifiers
+
+## Summary
+Incorrectly configured database backup identifiers at Turso led to data leaks for free-tier customers, where backup data from one customer's database was accessible to another. The subsequent fix for the leak resulted in possible data loss when incorrectly configured backups were purged.
+
+## Timeline
+- Nov 2023 — Backup identifier collision begins occurring for free-tier databases
+- Dec 1 — Customer reports seeing unfamiliar data in their database
+- Dec 2 — Investigation confirms backup ID collision causing cross-customer data exposure
+- Dec 3 — Affected backups identified and quarantined
+- Dec 4 — Fix deployed; colliding backups purged, causing data loss for some customers
+- Dec 5 — Post-incident report published
+
+## Root Cause
+The backup system used a shortened identifier scheme for free-tier databases that did not guarantee uniqueness across all customers. When two databases happened to receive the same shortened backup identifier, their backup data was stored in the same location, causing cross-contamination. When one customer's backup was restored, it could contain data from the other customer's database. The fix required purging all backups with colliding identifiers, which caused data loss for customers whose only backup was in the collision set.
+
+## Impact
+- Data from some free-tier customers leaked to other customers
+- Data loss when colliding backups were purged during remediation
+- Customer trust severely damaged
+- Privacy and security implications of cross-customer data exposure
+
+## Mitigation
+- Immediate: quarantined affected backups; notified affected customers
+- Short-term: deployed globally unique backup identifiers (UUIDs)
+- Long-term: implemented backup isolation verification; added automated testing for identifier uniqueness
+
+## Lessons Learned
+1. Backup identifiers must be globally unique — shortened identifiers risk collision.
+2. Cross-customer data isolation is a fundamental security requirement, not an optimization.
+3. Fixing a data leak can cause data loss if the fix requires purging shared storage.
+4. Free-tier infrastructure must have the same isolation guarantees as paid tiers.

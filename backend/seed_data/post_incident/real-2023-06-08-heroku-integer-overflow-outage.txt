@@ -1,0 +1,37 @@
+# Incident: Integer Overflow in Sequence Counter Causes Platform Failure
+Date: 2023-06-08
+Service: heroku-platform
+Severity: P0
+Root Cause Tag: integer-overflow
+
+## Summary
+Heroku experienced a significant outage when an internal sequence counter hit the 32-bit signed integer maximum (2,147,483,647). The overflow caused the ID generation system to produce invalid or duplicate identifiers, breaking request routing and application deployment across the platform.
+
+## Timeline
+- 10:00 UTC — Sequence counter approaches INT32_MAX
+- 10:12 UTC — Counter overflows; new IDs wrap to negative numbers
+- 10:15 UTC — Request routing begins failing due to invalid route IDs
+- 10:30 UTC — Application deployments blocked
+- 11:00 UTC — Root cause identified as integer overflow
+- 12:00 UTC — Emergency migration to INT64 sequence completed
+- 12:30 UTC — Full platform recovery
+
+## Root Cause
+An internal PostgreSQL sequence used for generating request routing identifiers was defined as a 32-bit integer (INT4). As the platform processed billions of requests over its lifetime, the sequence approached and eventually exceeded 2,147,483,647. The overflow caused the sequence to wrap around, producing negative numbers that downstream routing logic treated as invalid. The routing system rejected these IDs, causing requests to fail. The original schema was created early in Heroku's history when 2 billion was considered more than sufficient.
+
+## Impact
+- ~2.5 hours of platform degradation
+- Application request routing failures across all Heroku apps
+- New application deployments blocked
+- Existing running applications experienced intermittent request failures
+
+## Mitigation
+- Immediate: performed emergency ALTER SEQUENCE to INT64 (BIGINT)
+- Short-term: audited all other sequences for INT32 overflow risk
+- Long-term: standardized all new sequences as INT64; added monitoring alerts at 80% of INT32_MAX
+
+## Lessons Learned
+1. Integer overflow in sequence counters is predictable — monitor sequences and alert well before MAX.
+2. 32-bit integers are insufficient for any counter that grows monotonically over years of operation.
+3. Schema decisions made early in a platform's life can become time bombs years later.
+4. Proactive auditing of sequence column types should be a regular operational practice.

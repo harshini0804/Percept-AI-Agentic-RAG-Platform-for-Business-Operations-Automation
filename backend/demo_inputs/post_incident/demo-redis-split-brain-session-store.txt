@@ -1,0 +1,36 @@
+# Incident: Redis Cluster Split-Brain During Failover — Session Store
+Date: 2026-09-10
+Service: session-store
+Severity: P1
+
+## Summary
+The session store service experienced a 35-minute outage after a Redis Sentinel-managed failover resulted in a split-brain condition. Two Redis nodes simultaneously accepted writes, causing session data inconsistency. Users reported being randomly logged out or seeing other users' session data until the conflicting node was manually demoted.
+
+## Timeline
+- 11:15 UTC — Network blip causes Redis Sentinel to lose contact with the primary node
+- 11:16 UTC — Sentinel promotes replica-2 to primary, but original primary recovers and continues accepting writes
+- 11:18 UTC — Application load balancers route requests to both nodes; session data diverges
+- 11:25 UTC — Support tickets spike: users report random logouts and cross-session data leakage
+- 11:30 UTC — On-call engineer identifies two nodes claiming primary role via redis-cli INFO replication
+- 11:38 UTC — Original primary manually demoted; conflicting writes discarded
+- 11:50 UTC — Session store fully consistent; affected users re-authenticated
+
+## Root Cause
+Redis Sentinel's failover quorum was configured with only 2 of 3 sentinels required to agree on promotion. During the network blip, one sentinel lost contact with the primary but the other two did not. The sentinel that lost contact voted for promotion while the primary was still operational. Because the application connection pool had no fencing mechanism (no epoch-based or generation-ID check), both nodes accepted writes simultaneously, creating a classic split-brain scenario. The conflicting writes could not be automatically reconciled because Redis does not support multi-master conflict resolution.
+
+## Impact
+- 35 minutes of session inconsistency (11:15–11:50 UTC)
+- ~2,400 users experienced random logouts
+- 12 users reported seeing fragments of another user's session (cross-session data leakage)
+- 3 security incident reports filed by enterprise customers
+
+## Mitigation
+- Immediate: manually demoted the stale primary; flushed conflicting session keys
+- Short-term: increased Sentinel quorum to 3-of-3 for production clusters; added generation-ID fencing to the connection pool
+- Long-term: migrated session storage to Redis Cluster mode with proper slot-based partitioning; added automated split-brain detection alerting
+
+## Lessons Learned
+1. Redis Sentinel quorum of 2-of-3 is insufficient for production — any network partition can cause a split-brain.
+2. Application connection pools must implement fencing tokens or epoch checks to refuse writes to a demoted node.
+3. Session data leakage is a security incident, not just an availability incident — treat split-brain as a P0-security event.
+4. Automated split-brain detection (comparing INFO replication across all nodes) should run continuously, not just during failover.

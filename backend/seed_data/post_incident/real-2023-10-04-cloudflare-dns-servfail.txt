@@ -1,0 +1,37 @@
+# Incident: DNS Lookup Failures on 1.1.1.1 — DNSSEC Validation Error
+Date: 2023-10-04
+Service: cloudflare-dns
+Severity: P1
+Root Cause Tag: software-bug
+
+## Summary
+Cloudflare's 1.1.1.1 DNS resolver experienced DNS resolution problems for approximately 4 hours. Users relying on 1.1.1.1, WARP, Zero Trust, or third-party resolvers that upstream to 1.1.1.1 received SERVFAIL responses to valid queries. The outage was caused by an internal software error in DNSSEC validation, not an external attack.
+
+## Timeline
+- 07:00 UTC — DNSSEC key management system triggers a planned key rotation
+- 07:05 UTC — New DNSSEC signing keys propagate to resolver validation logic
+- 07:10 UTC — Validation logic encounters edge case; begins returning SERVFAIL for valid queries
+- 07:30 UTC — Monitoring alerts fire; engineering begins investigation
+- 08:00 UTC — Root cause identified as DNSSEC key rollover interaction
+- 09:30 UTC — Hotfix deployed to resolver fleet
+- 11:00 UTC — Full resolution confirmed; all SERVFAIL responses eliminated
+
+## Root Cause
+A planned DNSSEC key rollover triggered a latent bug in the resolver's DNSSEC validation logic. During the transition period where both old and new keys were valid, the resolver incorrectly rejected signatures made with the old key for certain record types. This caused valid DNS queries to fail with SERVFAIL responses. The bug had been present in the codebase but was never triggered because the specific combination of key rollover timing and record type had not occurred before.
+
+## Impact
+- ~4 hours of degraded DNS resolution for 1.1.1.1 users globally
+- WARP VPN users, Zero Trust clients, and third-party resolvers also affected
+- Websites and services using DNSSEC-signed zones were disproportionately impacted
+- Some users experienced complete DNS failure; others saw intermittent resolution
+
+## Mitigation
+- Immediate: identified and patched the DNSSEC validation edge case
+- Short-term: deployed hotfix across the entire resolver fleet
+- Long-term: added comprehensive DNSSEC key rollover test scenarios to CI; implemented canary-based rollout for resolver configuration changes; added synthetic DNSSEC validation probes
+
+## Lessons Learned
+1. DNSSEC key rollovers are inherently complex state transitions — they must be tested with every possible key/record combination.
+2. Latent bugs can remain dormant for years and trigger only during rare configuration transitions.
+3. DNS is critical infrastructure — resolver changes should go through canary rollout, not immediate global deployment.
+4. Monitoring must include synthetic DNS resolution probes, not just health checks on the resolver process itself.

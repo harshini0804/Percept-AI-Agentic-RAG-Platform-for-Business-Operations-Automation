@@ -1,0 +1,36 @@
+# Incident: Config Push Accidentally Disables Rate Limiter — Public API
+Date: 2025-09-01
+Service: public-api-gateway
+Severity: P0
+Root Cause Tag: config-error
+
+## Summary
+A configuration push intended to update rate limit thresholds accidentally disabled the rate limiter entirely on the public API gateway. Without rate limiting, a single API consumer sent 500x normal traffic, overwhelming backend services for 20 minutes.
+
+## Timeline
+- 10:00 UTC — SRE pushes updated rate limit config: intended to change threshold from 100 to 200 req/s per client
+- 10:01 UTC — Config parser treats malformed YAML (missing colon) as "rate limiting disabled"
+- 10:03 UTC — API consumer bot detects unlimited rate; scales its requests from 50/s to 25,000/s
+- 10:05 UTC — Backend services hit capacity limits; error rate spikes to 60%
+- 10:08 UTC — Monitoring alert: public-api error rate >50%
+- 10:12 UTC — On-call identifies rate limiter disabled in the live config
+- 10:15 UTC — Rate limiter re-enabled with original 100 req/s threshold
+- 10:20 UTC — Traffic normalizes; full recovery
+
+## Root Cause
+The rate limiter config file used YAML format. The SRE's edit changed `max_rate: 100` to `max_rate 200` (missing the colon). The YAML parser silently treated this as a string value rather than a key-value pair, and the rate limiter's config loader used a default of "unlimited" when the max_rate key was missing from the parsed config. No schema validation existed for the config file.
+
+## Impact
+- 20 minutes of API degradation (60% error rate)
+- Backend services at capacity limits
+- 3 SLA breach notifications sent to enterprise customers
+
+## Mitigation
+- Immediate: reverted config to previous known-good version
+- Short-term: added YAML schema validation to the config push pipeline; rate limiter defaults to "deny all" when config is malformed (fail-closed)
+- Long-term: all config changes go through a staging environment with automated validation and canary rollout
+
+## Lessons Learned
+1. Config parsers must fail closed — a missing rate limit key should mean "block all," not "allow all."
+2. YAML schema validation must run before any config push reaches production.
+3. Config changes should go through the same CI/CD pipeline as code changes, including staging and canary phases.

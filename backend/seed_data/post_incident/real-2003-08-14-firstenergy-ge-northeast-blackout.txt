@@ -1,0 +1,37 @@
+# Incident: Alarm System Bug Enables Cascading Power Grid Failure
+Date: 2003-08-14
+Service: firstenergy-grid
+Severity: P0
+Root Cause Tag: monitoring-failure
+
+## Summary
+FirstEnergy experienced a local transmission line failure when lines hit untrimmed foliage. The normal recovery process requires an alarm to alert operators to redistribute power, but GE's monitoring system had a software bug that prevented the alarm from triggering. Without operator awareness, the local failure cascaded into the Northeast Blackout of 2003, affecting 55 million people across the US and Canada.
+
+## Timeline
+- 13:31 EDT — FirstEnergy's Eastlake Unit 5 generator trips offline
+- 14:14 EDT — Alarm and logging system (GE XA/21) fails silently due to race condition
+- 15:05 EDT — First 345kV transmission line contacts overgrown trees, trips
+- 15:32 EDT — Two more 345kV lines trip; operators unaware due to alarm failure
+- 16:06 EDT — Cascading failures begin across interconnected grid
+- 16:10 EDT — 55 million people lose power across 8 US states and Ontario
+
+## Root Cause
+GE's XA/21 energy management system had a race condition in its alarm subsystem. When multiple events occurred in rapid succession, the alarm processing thread entered a deadlock state, silently stopping all alarm notifications. Operators at FirstEnergy's control room had no indication that transmission lines were tripping. Without operator intervention to redistribute load, each line trip increased the load on remaining lines, which then also overloaded and tripped. The cascade propagated through the interconnected grid across state and national boundaries.
+
+## Impact
+- 55 million people without power across 8 US states and Ontario, Canada
+- ~$6 billion in economic losses
+- 11 deaths attributed to the blackout
+- Power restoration took up to 4 days in some areas
+- The largest blackout in North American history at the time
+
+## Mitigation
+- Immediate: manual grid restoration over several days
+- Short-term: GE patched the alarm system race condition
+- Long-term: mandatory reliability standards (NERC CIP) enacted; vegetation management standards strengthened; real-time grid monitoring requirements established
+
+## Lessons Learned
+1. Alarm systems are safety-critical — they must be tested for race conditions and failure modes.
+2. Silent failures in monitoring systems are catastrophic because operators lose situational awareness.
+3. Cascading failures in interconnected systems require automated circuit breakers, not just operator intervention.
+4. The blast radius of a single local failure can be enormous in tightly coupled systems.

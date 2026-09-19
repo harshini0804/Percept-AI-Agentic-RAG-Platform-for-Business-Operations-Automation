@@ -1,0 +1,35 @@
+# Incident: Redis Key Eviction Spike — Recommendation Engine
+Date: 2025-04-03
+Service: recommendation-engine
+Severity: P2
+Root Cause Tag: redis-failure
+
+## Summary
+A sudden spike in Redis key evictions caused the recommendation engine's precomputed model results to be evicted from cache, forcing expensive recomputation on every request. Recommendation latency increased 15x (from 50ms to 750ms) for 35 minutes.
+
+## Timeline
+- 16:00 UTC — Marketing launches flash sale campaign; product page traffic increases 5x
+- 16:05 UTC — Redis memory utilization hits maxmemory; eviction policy (allkeys-lru) begins evicting recommendation cache entries
+- 16:08 UTC — Recommendation API p99 latency jumps from 50ms to 750ms
+- 16:10 UTC — Alerts fire for recommendation service SLO breach
+- 16:15 UTC — On-call identifies mass eviction of recommendation keys in favor of session/cart data
+- 16:25 UTC — Scaled Redis cluster from 3 to 5 nodes; memory pressure relieved
+- 16:35 UTC — Recommendation cache rebuilt; latency normalized
+
+## Root Cause
+The recommendation engine and the shopping cart service shared a single Redis cluster. The flash sale generated a surge of new cart entries that consumed memory faster than the TTL-based expiration of old entries. The allkeys-lru eviction policy correctly evicted the least-recently-used keys, but those happened to be the precomputed recommendation matrices (large, infrequently accessed per-key but critical for latency). No key namespace isolation or memory reservation existed.
+
+## Impact
+- 35 minutes of degraded recommendation latency (15x slower)
+- Estimated 8% decrease in recommendation click-through rate during the incident
+- No data loss
+
+## Mitigation
+- Immediate: horizontally scaled Redis cluster
+- Short-term: separated recommendation cache into its own dedicated Redis instance
+- Long-term: implemented per-namespace memory quotas using Redis ACLs; added eviction rate alerting
+
+## Lessons Learned
+1. Shared Redis clusters without namespace isolation are a latent risk — high-volume workloads evict low-volume critical data.
+2. Recommendation cache should be on a dedicated instance with its own memory and eviction policy.
+3. Flash sale / marketing campaigns should trigger pre-scaling of cache infrastructure.

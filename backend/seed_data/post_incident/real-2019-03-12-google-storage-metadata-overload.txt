@@ -1,0 +1,37 @@
+# Incident: Storage Metadata Overload — Gmail and Drive Outage
+Date: 2019-03-12
+Service: google-cloud-storage
+Severity: P1
+Root Cause Tag: config-change-overload
+
+## Summary
+A configuration change intended to address increased demand for metadata storage capacity in Google's blob storage system caused the metadata lookup service to become overloaded. This cascading failure affected Gmail, Google Drive, Google Photos, YouTube, and multiple Google Cloud Platform services that depend on the same underlying blob storage infrastructure for approximately 4 hours.
+
+## Timeline
+- 18:40 UTC — Configuration change deployed to blob storage metadata system
+- 18:50 UTC — Metadata lookup latency increases sharply
+- 19:00 UTC — Gmail attachment uploads begin failing; Google Drive file operations degraded
+- 19:15 UTC — Google Photos and YouTube uploads also affected
+- 19:30 UTC — GCP services (Cloud Storage, Cloud SQL backups) report elevated error rates
+- 20:45 UTC — Configuration change identified as root cause and rolled back
+- 22:40 UTC — Full recovery across all affected services (4 hours total)
+
+## Root Cause
+Google's internal blob storage system uses a distributed metadata service to map objects to their physical storage locations. A configuration change was deployed to increase the capacity of this metadata service in response to growing demand. However, the change caused an unexpected interaction with the existing load distribution logic, which sent a disproportionate amount of traffic to a subset of metadata servers. These servers became overloaded and began rejecting requests, causing cascading failures as dependent services retried their failed requests, further amplifying the load.
+
+## Impact
+- ~4 hours of degraded/unavailable service across Gmail, Google Drive, Google Photos, YouTube
+- GCP services (Cloud Storage, Cloud SQL, Cloud Datastore) also affected
+- Enterprise Gmail users unable to send attachments or access Drive files
+- YouTube creators unable to upload videos during the incident window
+
+## Mitigation
+- Immediate: rolled back the configuration change; redistributed metadata traffic
+- Short-term: validated metadata capacity changes in a staged rollout
+- Long-term: implemented load simulation for metadata configuration changes; added circuit breakers to prevent cascading retry amplification; decoupled blob metadata services across product boundaries
+
+## Lessons Learned
+1. Configuration changes to shared infrastructure must be tested under realistic load — capacity changes can cause unexpected traffic redistribution.
+2. Shared storage infrastructure creates blast-radius risk — Gmail, Drive, Photos, and YouTube all sharing the same metadata service means one failure affects everything.
+3. Retry amplification is a common cascading failure pattern — circuit breakers are essential at every service boundary.
+4. Staged rollout should be mandatory for any change to infrastructure that serves multiple critical products.

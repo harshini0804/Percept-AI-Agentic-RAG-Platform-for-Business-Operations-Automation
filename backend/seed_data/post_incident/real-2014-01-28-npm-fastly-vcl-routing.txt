@@ -1,0 +1,36 @@
+# Incident: CDN Configuration Error Causes Backend Routing Failure
+Date: 2014-01-28
+Service: npm-registry
+Severity: P0
+Root Cause Tag: cdn-config-error
+
+## Summary
+A Fastly CDN configuration change caused NPM registry traffic to be routed to the wrong backend. The issue was caused by setting req.backend in a vcl_fetch function and then calling restart, which reset the backend to the first in the list (Manta storage) instead of the intended CouchDB load-balanced servers.
+
+## Timeline
+- 14:30 UTC — CDN configuration change deployed to Fastly edge
+- 14:35 UTC — npm install commands begin failing with 503 errors
+- 14:50 UTC — Monitoring alerts fire; investigation begins
+- 15:20 UTC — VCL configuration identified as root cause
+- 15:35 UTC — Configuration rolled back; registry begins recovering
+- 15:50 UTC — Full service restoration
+
+## Root Cause
+The Fastly VCL (Varnish Configuration Language) configuration was modified to set the req.backend in a vcl_fetch function and then call restart to re-parse the rules. However, calling restart in Fastly/Varnish resets req.backend to the first backend in the director list. The first backend happened to be Manta (object storage), not the intended CouchDB load-balanced servers. This caused all NPM registry API requests to be routed to a storage backend that couldn't serve them.
+
+## Impact
+- ~80 minutes of npm registry unavailability
+- All npm install/publish commands failed globally
+- CI/CD pipelines dependent on npm registry failed worldwide
+- Developer productivity loss across the JavaScript ecosystem
+
+## Mitigation
+- Immediate: rolled back the VCL configuration change
+- Short-term: fixed the VCL logic to not rely on restart behavior
+- Long-term: added VCL configuration testing with backend routing validation; documented Fastly-specific restart semantics
+
+## Lessons Learned
+1. CDN VCL configuration changes require understanding platform-specific semantics (restart behavior).
+2. Backend routing in CDN configurations should be validated with integration tests, not just syntax checks.
+3. The order of backends in a director list matters more than expected when restart is used.
+4. Package registries are critical infrastructure — their CDN configurations deserve extra review.

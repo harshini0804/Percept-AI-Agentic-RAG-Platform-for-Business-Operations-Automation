@@ -1,0 +1,36 @@
+# Incident: Foreign Key Integer Overflow — Authorization System Failure
+Date: 2023-06-08
+Service: heroku-api
+Severity: P1
+Root Cause Tag: integer-overflow
+
+## Summary
+A foreign key column in Heroku's authorization database used a smaller integer data type (INT32) than the primary key it referenced. When the primary key exceeded 2.147 billion (the INT32 max), the foreign key column overflowed, causing all new authorization creation to fail. This prevented customers from deploying applications or creating new API authorizations for several hours.
+
+## Timeline
+- 15:05 UTC — Database error alerts fire: insert failures on authorizations table
+- 15:10 UTC — Customer reports: unable to deploy or create new authorizations
+- 15:30 UTC — Engineering identifies foreign key column overflow (INT32 vs INT64 mismatch)
+- 16:00 UTC — Emergency schema migration initiated to widen the column to INT64
+- 18:30 UTC — Migration completes; authorization creation restored
+- 19:00 UTC — Full service recovery confirmed (4 hours total)
+
+## Root Cause
+The authorizations table had a foreign key referencing a primary key on another table. The primary key was defined as BIGINT (INT64), but the foreign key column was defined as INTEGER (INT32). This mismatch went undetected for years because the primary key value was well within INT32 range. When the referenced primary key exceeded 2,147,483,647 (the INT32 maximum), the foreign key column could not store the value, causing all new authorization inserts to fail with an overflow error. Schema linting that would have caught the type mismatch did not exist.
+
+## Impact
+- ~4 hours of authorization system failure (15:05–19:00 UTC)
+- Customers unable to create new deployments, API tokens, or OAuth authorizations
+- Existing authorizations continued to work (read path unaffected)
+- Triggered a full Heroku API outage for write operations
+
+## Mitigation
+- Immediate: initiated emergency ALTER TABLE to widen the foreign key column to BIGINT
+- Short-term: audited all other foreign key columns for similar type mismatches
+- Long-term: implemented schema linting to flag primary/foreign key type mismatches; added monitoring on auto-incrementing columns approaching type limits
+
+## Lessons Learned
+1. Foreign key columns must always match the data type of the primary key they reference — this should be enforced by schema linting.
+2. Auto-incrementing integer columns are ticking time bombs — monitor their proximity to type limits.
+3. The INT32 limit (2.1 billion) seems far away until it's not — high-volume tables can reach it in a few years.
+4. Emergency schema migrations on large tables take hours — the time to fix this is before it breaks, not during an outage.

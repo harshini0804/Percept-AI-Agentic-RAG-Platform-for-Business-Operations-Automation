@@ -1,0 +1,36 @@
+# Incident: Leap Year Certificate Generation Bug — Global Azure Outage
+Date: 2012-02-29
+Service: azure-compute
+Severity: P0
+Root Cause Tag: date-handling-bug
+
+## Summary
+Azure experienced a global outage on February 29, 2012 because certificate generation code computed "one year from today" by adding one to the year component of the date. On February 29, this produced February 29, 2013 — an invalid date — causing certificate creation to fail and blocking VM provisioning across all Azure regions.
+
+## Timeline
+- 00:00 UTC Feb 29 — Certificate generation begins producing invalid dates
+- 00:30 UTC — New VM provisioning failures reported across Azure
+- 02:00 UTC — Azure engineering identifies certificate generation as root cause
+- 06:00 UTC — Hotfix deployed to certificate generation service
+- 12:00 UTC — VM provisioning fully restored across all regions
+- 18:00 UTC — All accumulated provisioning backlog cleared
+
+## Root Cause
+The certificate generation service created certificates valid for one year by computing the expiration date as (current_year + 1, current_month, current_day). On February 29, 2012, this produced February 29, 2013, which doesn't exist. Instead of using a date library that handles edge cases (like Python's dateutil.relativedelta), the code used manual arithmetic. The resulting invalid date caused the certificate generation to throw an exception, which blocked all operations that required new certificates — including VM provisioning, role instance recycling, and service deployments.
+
+## Impact
+- ~12+ hours of degraded Azure Compute service globally
+- No new VMs could be provisioned in any Azure region
+- Existing VMs running, but recycling/healing operations blocked
+- Azure customers unable to scale or deploy new services
+
+## Mitigation
+- Immediate: deployed hotfix to certificate generation code
+- Short-term: cleared backlog of failed provisioning requests
+- Long-term: replaced manual date arithmetic with proper datetime library; added leap year edge case tests
+
+## Lessons Learned
+1. Never implement date arithmetic manually — always use well-tested datetime libraries.
+2. Leap year edge cases (Feb 29) must be explicitly tested for any time-based operations.
+3. Certificate systems are foundational — their failure cascades to all dependent services.
+4. Date-related bugs are predictable and should be proactively tested before known edge dates.

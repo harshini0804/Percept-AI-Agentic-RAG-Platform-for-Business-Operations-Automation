@@ -1,0 +1,37 @@
+# Incident: CNAME Loop Causes DNS Resolution Failure — API Platform
+Date: 2025-08-04
+Service: api-platform
+Severity: P0
+Root Cause Tag: dns-config-error
+
+## Summary
+A circular CNAME configuration created during a load balancer migration caused complete DNS resolution failure for the API platform domain. All API calls returned SERVFAIL for 28 minutes until the circular reference was identified and corrected.
+
+## Timeline
+- 15:00 UTC — Infrastructure team begins migrating api.company.com from LB-A to LB-B
+- 15:02 UTC — Step 1: api.company.com CNAME updated to point to lb-b.company.com
+- 15:03 UTC — Step 2 (error): lb-b.company.com CNAME accidentally configured to point back to api.company.com
+- 15:05 UTC — DNS resolvers detect CNAME loop; return SERVFAIL for api.company.com
+- 15:06 UTC — All API calls fail; monitoring alerts fire
+- 15:10 UTC — On-call checks DNS; sees CNAME loop
+- 15:12 UTC — Attempts to fix via DNS console but change propagation takes 15 minutes (registrar-level DNS)
+- 15:28 UTC — Updated CNAME propagates; lb-b.company.com points to correct A record
+- 15:30 UTC — Full recovery
+
+## Root Cause
+During the load balancer migration, the engineer updating DNS records accidentally created a circular CNAME chain: api.company.com → lb-b.company.com → api.company.com. The DNS management console did not validate for circular references. The registrar-level DNS had a 15-minute propagation delay, which extended the outage beyond the time needed to identify the issue.
+
+## Impact
+- 28 minutes of complete API platform unavailability
+- All external API consumers affected (~200 partner integrations)
+- ~180,000 failed API calls
+
+## Mitigation
+- Immediate: corrected the CNAME to point lb-b.company.com to the actual A record
+- Short-term: migrated DNS to a provider with instant propagation (Cloudflare); added CNAME loop detection to the DNS management tooling
+- Long-term: all DNS changes now require peer review and automated validation (loop detection, target reachability check) before applying
+
+## Lessons Learned
+1. DNS management tools must validate for circular CNAME references before applying changes.
+2. DNS changes should use providers with near-instant propagation, not registrar-level DNS with 15-minute delays.
+3. Infrastructure migrations involving DNS must have a rollback plan that doesn't depend on DNS propagation.

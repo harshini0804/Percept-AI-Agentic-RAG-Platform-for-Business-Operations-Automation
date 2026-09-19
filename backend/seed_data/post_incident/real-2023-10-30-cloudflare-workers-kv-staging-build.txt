@@ -1,0 +1,38 @@
+# Incident: Deployment Tool Routes Production to Staging Build
+Date: 2023-10-30
+Service: cloudflare-workers-kv
+Severity: P0
+Root Cause Tag: deployment-tool-bug
+
+## Summary
+A deployment tool bug caused the production environment to reference a staging build version, routing Cloudflare production traffic to an unauthorized endpoint that returned HTTP 401 errors. The issue cascaded to Workers KV, Pages, Access, and Turnstile.
+
+## Timeline
+- 11:00 UTC — Deployment tool runs scheduled production deployment
+- 11:02 UTC — Production environment configured to use staging build artifact
+- 11:05 UTC — Workers KV requests begin returning 401 Unauthorized
+- 11:10 UTC — Pages, Access, and Turnstile report failures
+- 11:20 UTC — Deployment tool bug identified; correct build artifact located
+- 11:35 UTC — Production redeployed with correct build
+- 11:45 UTC — Full service recovery
+
+## Root Cause
+A bug in Cloudflare's deployment orchestration tool caused it to resolve the "latest production build" reference to a staging build artifact. The staging build contained authentication middleware configured for the staging environment, which rejected all production credentials with HTTP 401. Because Workers KV, Pages, Access, and Turnstile all shared the same deployment pipeline, the bad build affected all four services simultaneously.
+
+## Impact
+- ~45 minutes of multi-service outage
+- Workers KV: key-value operations failing
+- Pages: site deployments and serving failing
+- Access: zero-trust authentication failing
+- Turnstile: CAPTCHA verification failing
+
+## Mitigation
+- Immediate: manually redeployed correct production build artifact
+- Short-term: fixed the build resolution bug in the deployment tool
+- Long-term: added build artifact environment validation before deployment; implemented deployment pipeline isolation between services
+
+## Lessons Learned
+1. Deployment tools must validate that build artifacts match the target environment.
+2. Shared deployment pipelines create blast radius risk — a single bug affects all services.
+3. Environment-specific configuration (auth middleware) must be validated post-deployment.
+4. Build artifact references should include environment metadata for cross-checking.

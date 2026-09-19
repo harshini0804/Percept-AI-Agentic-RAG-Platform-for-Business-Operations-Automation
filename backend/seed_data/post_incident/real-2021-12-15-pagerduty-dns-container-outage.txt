@@ -1,0 +1,35 @@
+# Incident: DNS Configuration Defect Crashes Container Orchestration
+Date: 2021-12-15
+Service: pagerduty-infrastructure
+Severity: P0
+Root Cause Tag: dns-config-error
+
+## Summary
+PagerDuty deployed a DNS configuration change to their infrastructure that contained a defect not detected in testing environments. The change immediately caused all services running in the container orchestration cluster to lose DNS resolution capability, making them unable to communicate with each other or external dependencies.
+
+## Timeline
+- 00:17 UTC — DNS configuration change deployed to production infrastructure
+- 00:18 UTC — Container orchestration cluster services begin failing DNS lookups
+- 00:25 UTC — Alerting systems detect widespread service failures
+- 00:40 UTC — Root cause identified as DNS configuration change
+- 01:05 UTC — Configuration rolled back; DNS resolution begins recovering
+- 01:30 UTC — Full service restoration confirmed
+
+## Root Cause
+A DNS configuration change was deployed to PagerDuty's container orchestration infrastructure. The change contained a defect in how DNS forwarding rules were specified — specifically, an incorrect upstream resolver address that resolved correctly in the test environment (which used a different network topology) but failed in production. When deployed, all containers lost the ability to resolve both internal service names and external hostnames, causing cascading failures across all microservices.
+
+## Impact
+- ~70 minutes of degraded or unavailable incident management services
+- Customers unable to receive, acknowledge, or escalate incidents during the outage
+- Ironic impact: the incident management platform itself was down during incidents at customer sites
+
+## Mitigation
+- Immediate: rolled back the DNS configuration change
+- Short-term: added DNS resolution health checks as a deployment gate
+- Long-term: implemented production-mirroring for DNS configuration in test environments; added canary deployment for infrastructure-level changes
+
+## Lessons Learned
+1. DNS configuration changes are high-blast-radius — they must use canary deployment, not full rollout.
+2. Test environments must mirror production network topology for DNS configuration validation.
+3. Infrastructure-level changes (DNS, networking) need different deployment safeguards than application-level changes.
+4. An incident management platform being unavailable during customer incidents is a worst-case scenario that requires out-of-band monitoring.

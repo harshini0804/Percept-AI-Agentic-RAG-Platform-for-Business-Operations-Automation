@@ -1,0 +1,37 @@
+# Incident: Stale Internal DNS Records — Service Discovery Failure
+Date: 2024-11-03
+Service: platform-dns
+Severity: P1
+Root Cause Tag: dns-config-error
+
+## Summary
+An internal DNS TTL misconfiguration caused service discovery to serve stale records for 50 minutes after a database failover. Applications continued connecting to the decommissioned primary database, receiving connection refused errors.
+
+## Timeline
+- 09:00 UTC — Planned database failover: primary switched from db-primary-1 to db-primary-2
+- 09:01 UTC — DNS A record updated from 10.0.1.10 to 10.0.1.20
+- 09:02 UTC — Applications continue connecting to 10.0.1.10 (cached stale record)
+- 09:05 UTC — Connection errors spike across 8 services
+- 09:10 UTC — DBA confirms DNS record is correct; suspects caching
+- 09:20 UTC — Investigation reveals internal DNS resolver has 3600-second (1 hour) TTL
+- 09:30 UTC — Flushed DNS cache on all resolvers manually
+- 09:35 UTC — Applications reconnect to new primary
+- 09:50 UTC — All clear
+
+## Root Cause
+The internal DNS resolver was configured with a default TTL of 3600 seconds (1 hour) for all A records, including service discovery records. During the planned database failover, the DNS record was updated immediately, but all application-side resolvers and the central resolver cached the old IP for up to 1 hour. No one had tested or documented the actual DNS propagation time for internal records.
+
+## Impact
+- 50 minutes of database connectivity failures across 8 services
+- ~30,000 failed database queries
+- No data loss (failover was clean; old primary was read-only)
+
+## Mitigation
+- Immediate: manually flushed DNS cache on all resolvers
+- Short-term: reduced internal DNS TTL to 30 seconds for service discovery records
+- Long-term: migrated service discovery to Consul with health-check-based routing (eliminates DNS TTL dependency entirely)
+
+## Lessons Learned
+1. Internal DNS TTLs for service discovery records must be short (30-60 seconds), not the default 3600 seconds.
+2. Planned failovers must include DNS propagation verification before declaring the failover complete.
+3. Applications should implement connection-level health checks, not rely solely on DNS for service discovery.

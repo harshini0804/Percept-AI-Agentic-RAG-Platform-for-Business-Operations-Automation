@@ -1,0 +1,36 @@
+# Incident: Foreign Key Hits INT32 Max — Actions and Pages Broken
+Date: 2021-05-01
+Service: github-actions
+Severity: P0
+Root Cause Tag: integer-overflow
+
+## Summary
+A foreign key on GitHub's scoped-tokens table hit the maximum INT32 value (2,147,483,647), causing high failure rates for Actions and Pages. Git operations using scoped tokens also broke. Recovery required a long-running schema migration from INT32 to INT64.
+
+## Timeline
+- 09:00 UTC — Scoped token creation begins failing intermittently
+- 09:15 UTC — Actions pipeline failures spike
+- 09:30 UTC — Pages deployments failing
+- 10:00 UTC — INT32 overflow identified on scoped_tokens foreign key
+- 10:30 UTC — Emergency schema migration from INT32 to INT64 started
+- 19:48 UTC — Schema migration completes after ~9 hours
+- 20:00 UTC — Full service restoration
+
+## Root Cause
+The scoped_tokens table in GitHub's MySQL database had a foreign key column defined as INT (32-bit signed integer, max 2,147,483,647). As GitHub's platform grew, the number of scoped token operations — driven primarily by Actions workflows and Pages deployments — caused this column to approach and eventually reach the INT32 maximum. New token creation failed with an overflow error. A lint rule that would have caught INT32 columns during schema review existed but predated the creation of this particular column.
+
+## Impact
+- ~9.75 hours of degraded Actions and Pages service
+- Scoped-token-based Git operations (clone, push via GITHUB_TOKEN) broken
+- One Action briefly received unauthorized access grants (revoked immediately)
+
+## Mitigation
+- Immediate: began emergency ALTER TABLE to change column to BIGINT (INT64)
+- Short-term: migration completed after ~9 hours due to table size
+- Long-term: audited all integer columns across all tables; added INT32 usage alerting at 80% capacity
+
+## Lessons Learned
+1. INT32 columns on high-volume tables are time bombs — default to INT64 for all new schemas.
+2. Schema linting must cover all columns, including those created before the lint rule existed.
+3. Large table schema migrations take hours — they cannot be an emergency-only procedure.
+4. Monitor integer column utilization proactively, not reactively.

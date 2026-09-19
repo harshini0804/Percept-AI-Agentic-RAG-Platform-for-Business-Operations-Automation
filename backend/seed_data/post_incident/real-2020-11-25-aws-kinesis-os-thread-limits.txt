@@ -1,0 +1,38 @@
+# Incident: Front-End Fleet Exceeds OS Thread Limits — Multi-Service Cascade
+Date: 2020-11-25
+Service: aws-kinesis
+Severity: P0
+Root Cause Tag: resource-exhaustion
+
+## Summary
+AWS Kinesis experienced a major outage when its front-end fleet exceeded operating system thread limits. A small increase in capacity caused the fleet to cross a threshold in the number of threads per server, exhausting OS thread limits. The Kinesis failure cascaded to dependent services including CloudWatch, Lambda, and other AWS services that rely on Kinesis for internal data streaming.
+
+## Timeline
+- 02:44 PST — New capacity added to Kinesis front-end fleet
+- 03:00 PST — Thread creation failures begin on front-end servers
+- 03:30 PST — Kinesis API errors spike; dependent services begin failing
+- 05:00 PST — Root cause identified as OS thread limit exhaustion
+- 08:00 PST — Thread allocation optimized; fleet begins recovering
+- 14:00 PST — CloudWatch and other dependent services fully recovered
+- 22:00 PST — Full Kinesis recovery confirmed
+
+## Root Cause
+Each Kinesis front-end server managed a large number of shards, and each shard required multiple threads for processing. A routine capacity addition pushed the total thread count per server beyond the operating system's maximum thread limit (typically 32,768 or 65,536 on Linux). When new threads could not be created, request processing failed. The failure was amplified because Kinesis front-end servers handle both customer data plane traffic and internal control plane operations. With the front-end fleet degraded, Kinesis couldn't process the internal data streams that CloudWatch, Lambda, and other AWS services depend on.
+
+## Impact
+- ~18 hours of degraded or unavailable Kinesis in US-EAST-1
+- CloudWatch: metrics and alarms delayed or missing
+- Lambda: invocations failing for Kinesis-triggered functions
+- Cognito, SQS, and other services with Kinesis dependencies affected
+- Customers unable to monitor their own AWS resources during the outage
+
+## Mitigation
+- Immediate: reduced thread count per shard; scaled out more servers
+- Short-term: optimized thread allocation to reduce per-shard thread count
+- Long-term: redesigned front-end architecture to use async I/O instead of thread-per-shard; added OS resource monitoring with pre-threshold alerting
+
+## Lessons Learned
+1. OS-level resource limits (threads, file descriptors) must be monitored and alerted before threshold.
+2. Thread-per-shard architectures don't scale — async I/O is necessary at scale.
+3. Internal AWS service dependencies on Kinesis create circular failure modes (can't monitor the monitoring).
+4. Capacity additions should be validated against OS resource limits, not just application-level metrics.

@@ -1,0 +1,35 @@
+# Incident: Undiscovered Software Bug — Global CDN Outage
+Date: 2021-06-08
+Service: fastly-cdn
+Severity: P0
+Root Cause Tag: software-bug
+
+## Summary
+Fastly experienced a global CDN outage lasting approximately 49 minutes that took down major websites including Amazon, Reddit, GitHub, Twitch, CNN, and the UK government's website. The outage was caused by an undiscovered software bug in Fastly's configuration system that was triggered by a valid customer configuration change. The bug had existed in the codebase undetected for weeks.
+
+## Timeline
+- 09:47 UTC — A Fastly customer deploys a valid configuration change
+- 09:47 UTC — The configuration change triggers a latent bug; 85% of Fastly's global network returns 503 errors
+- 09:58 UTC — Fastly engineering identifies the cause and begins disabling the affected configuration
+- 10:36 UTC — 95% of the network recovered
+- 10:45 UTC — Full global recovery confirmed (49 minutes total)
+
+## Root Cause
+A software deployment weeks prior introduced a bug that could be triggered under specific, but valid, customer configuration circumstances. On June 8, a customer made a routine configuration change that happened to match the triggering condition. The bug caused the service configuration to generate an invalid internal state, which the edge servers interpreted as a reason to return 503 Service Unavailable. Because the invalid state propagated globally through Fastly's configuration distribution system, 85% of edge servers simultaneously began returning errors.
+
+## Impact
+- 49 minutes of global CDN outage
+- Major websites unreachable: Amazon, Reddit, GitHub, Twitch, Pinterest, CNN, BBC, UK gov
+- Estimated billions of dollars in aggregate economic impact across affected customers
+- Highlighted the fragility of internet infrastructure concentrated in a few CDN providers
+
+## Mitigation
+- Immediate: identified the triggering configuration and disabled it; deployed a fix
+- Short-term: patched the underlying software bug
+- Long-term: added configuration validation checks to prevent the triggering condition; improved testing to cover edge cases in configuration processing; implemented canary deployment for configuration changes
+
+## Lessons Learned
+1. Valid customer actions should never be able to trigger a global outage — configuration systems need defensive validation.
+2. Latent bugs can exist undetected for weeks and trigger under specific, hard-to-predict conditions.
+3. Configuration distribution systems need circuit breakers — invalid configs should not propagate globally.
+4. CDN concentration risk is real — many businesses had no fallback when Fastly went down.

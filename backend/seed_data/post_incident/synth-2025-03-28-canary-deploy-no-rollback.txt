@@ -1,0 +1,36 @@
+# Incident: Canary Deployment Without Automatic Rollback — Search Service
+Date: 2025-03-28
+Service: search-service
+Severity: P1
+Root Cause Tag: deployment-failure
+
+## Summary
+A canary deployment of the search service introduced a query parsing regression that caused 30% of search queries to return empty results. The canary was promoted to full deployment because the automated rollback check only monitored error rates, not result quality. 45 minutes elapsed before manual intervention.
+
+## Timeline
+- 11:00 UTC — Canary deployment of search-service v4.2.0 to 10% of pods
+- 11:05 UTC — Canary health check passes: error rate <1%, latency within SLO
+- 11:10 UTC — Automated promotion: v4.2.0 deployed to 100% of pods
+- 11:15 UTC — User complaints begin: "search returns no results"
+- 11:25 UTC — Support escalates; 30% of queries confirmed returning empty result sets
+- 11:35 UTC — Engineering identifies query parser regression in v4.2.0 (new parser mishandles quoted phrases)
+- 11:45 UTC — Manual rollback to v4.1.3
+- 11:55 UTC — Full recovery
+
+## Root Cause
+The canary deployment's automated health check only monitored HTTP error rate and p99 latency. The query parsing regression returned valid HTTP 200 responses with empty result arrays — technically "successful" responses with correct latency. The canary check had no quality metric (e.g., "percentage of queries returning zero results" or "average result count compared to baseline"). Without this, the canary passed all automated gates and was auto-promoted.
+
+## Impact
+- 45 minutes of degraded search quality (30% of queries returned no results)
+- Estimated 15% drop in search-driven conversions during the incident
+- No data loss
+
+## Mitigation
+- Immediate: rolled back to v4.1.3
+- Short-term: added "zero-result rate" as a canary health metric with a 5% threshold
+- Long-term: implemented semantic canary checks that compare result distributions between canary and baseline; extended canary observation window from 5 to 20 minutes
+
+## Lessons Learned
+1. Canary health checks must include business-level quality metrics, not just infrastructure metrics (error rate, latency).
+2. "HTTP 200 with wrong data" is a silent failure that passes all standard health checks — always validate output quality.
+3. Automated canary promotion should require human approval for critical services, not just automated gate-passing.

@@ -1,0 +1,35 @@
+# Incident: Feature Flag Misconfiguration — Checkout Service
+Date: 2024-12-05
+Service: checkout-service
+Severity: P1
+Root Cause Tag: deployment-failure
+
+## Summary
+A feature flag intended to gate a new payment flow was accidentally enabled for all users during deployment instead of the 5% canary group. The new payment flow had an unresolved bug that caused double-charging. 340 customers were double-charged before the flag was rolled back.
+
+## Timeline
+- 09:00 UTC — Developer deploys v3.8.0 with new payment flow behind feature flag `new-checkout-flow`
+- 09:01 UTC — CI/CD pipeline sets flag to `100%` instead of `5%` (misconfigured deployment script)
+- 09:05 UTC — First double-charge complaint arrives via support chat
+- 09:12 UTC — 15 more complaints; pattern identified as double-charging on the new payment flow
+- 09:15 UTC — Feature flag manually set to 0%; old checkout flow restored
+- 09:30 UTC — Engineering confirms 340 affected transactions
+- 10:00 UTC — Automated refund process initiated for all affected customers
+
+## Root Cause
+The deployment script used a percentage variable from the CI environment. A recent CI config change renamed the canary percentage variable but the deployment script still referenced the old variable name, which defaulted to empty string. The feature flag service interpreted an empty percentage as "enabled for all" rather than "disabled."
+
+## Impact
+- 340 customers double-charged (total: $47,000 in erroneous charges)
+- All refunds processed within 2 hours
+- 3 negative social media posts
+
+## Mitigation
+- Immediate: disabled feature flag; initiated automated refunds
+- Short-term: fixed deployment script variable reference; added validation that feature flag percentages must be explicit integers
+- Long-term: feature flag service now rejects empty/null percentages (fails closed); added mandatory canary period before any flag exceeds 10%
+
+## Lessons Learned
+1. Feature flag services must fail closed — empty or null values should disable the flag, not enable it for all users.
+2. Deployment scripts must validate feature flag percentages before applying them.
+3. Canary percentages should be hardcoded in the deployment manifest, not derived from CI variables that can silently change.

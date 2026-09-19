@@ -1,0 +1,37 @@
+# Incident: React Component Bug Causes API Request Storm
+Date: 2022-09-12
+Service: cloudflare-dashboard
+Severity: P1
+Root Cause Tag: frontend-bug
+
+## Summary
+A React component bug in the Cloudflare dashboard caused excessive API calls to the Tenant Service due to an improperly configured useEffect dependency array. The storm of API requests overwhelmed the backend service, cascading into broader API and dashboard failures.
+
+## Timeline
+- 15:00 UTC — Dashboard component with buggy useEffect deployed
+- 15:15 UTC — Tenant Service begins receiving 100x normal request volume
+- 15:30 UTC — Tenant Service latency spikes; cascading to other API endpoints
+- 15:45 UTC — Dashboard becomes unresponsive; API error rates spike
+- 16:00 UTC — React component identified as source of request storm
+- 16:15 UTC — Buggy component disabled via feature flag
+- 16:30 UTC — API and dashboard recover
+
+## Root Cause
+A React component in the Cloudflare dashboard had a useEffect hook with an incorrectly specified dependency array. The dependency array included an object that was being recreated on every render, causing the effect to fire on every render cycle. The effect made an API call to the Tenant Service, creating an infinite loop of renders and API calls. When thousands of dashboard users simultaneously triggered this component, the combined request volume overwhelmed the Tenant Service, causing cascading failures across the API layer.
+
+## Impact
+- ~90 minutes of degraded dashboard and API performance
+- Dashboard unresponsive for many users
+- API latency spikes across multiple endpoints
+- Customer configuration changes delayed
+
+## Mitigation
+- Immediate: disabled the buggy component via feature flag
+- Short-term: fixed the useEffect dependency array; added React rendering cycle limits
+- Long-term: added API call rate limiting per dashboard session; implemented frontend request deduplication; added automated useEffect dependency analysis to CI
+
+## Lessons Learned
+1. React useEffect dependency arrays are a common source of infinite loops — lint and test aggressively.
+2. Frontend bugs can cause backend outages through request amplification.
+3. Backend services need per-client rate limiting to protect against frontend storms.
+4. Feature flags on dashboard components enable rapid mitigation without full redeployment.

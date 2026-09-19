@@ -2,6 +2,7 @@
 Date: 2024-05-22
 Service: auth-service
 Severity: P1
+Root Cause Tag: auth-token-storm
 
 ## Summary
 A thundering-herd token refresh storm caused the auth-service to become unresponsive for 35 minutes. All downstream services relying on JWT validation were unable to authenticate requests, resulting in a platform-wide partial outage.

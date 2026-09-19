@@ -1,0 +1,36 @@
+# Incident: HTTP/3 Protocol Bug Makes Firefox Unresponsive
+Date: 2022-01-13
+Service: firefox-browser
+Severity: P0
+Root Cause Tag: protocol-implementation-bug
+
+## Summary
+A specific code path in Firefox's network stack triggered a problem in the HTTP/3 protocol implementation that blocked all network communication, making Firefox unresponsive and unable to load any web content for nearly two hours. The issue affected all Firefox users globally.
+
+## Timeline
+- 09:15 UTC — Users begin reporting Firefox unable to load any web pages
+- 09:30 UTC — Mozilla confirms widespread reports; investigation begins
+- 09:45 UTC — HTTP/3 implementation identified as the blocking code path
+- 10:00 UTC — Temporary workaround: users can disable HTTP/3 in about:config
+- 10:30 UTC — Server-side mitigation deployed by disabling HTTP/3 negotiation
+- 11:00 UTC — Firefox push update released disabling HTTP/3 by default
+
+## Root Cause
+Firefox's HTTP/3 (QUIC) implementation had a bug in its connection pool management. Under specific network conditions that became more common due to a server-side change by a major CDN, Firefox would enter a state where the HTTP/3 connection pool was exhausted but the recovery mechanism for falling back to HTTP/2 was blocked by a lock contention issue. This caused all network requests to queue indefinitely, making the browser appear completely frozen.
+
+## Impact
+- ~2 hours of Firefox being non-functional for affected users
+- All web page loads, extension updates, and sync operations blocked
+- Users unable to even access Firefox's about:config to apply workaround
+- Significant user trust impact for Firefox
+
+## Mitigation
+- Immediate: published workaround to disable HTTP/3 in about:config
+- Short-term: deployed server-side mitigation; pushed Firefox update
+- Long-term: fixed the connection pool exhaustion and fallback mechanism; added HTTP/3 circuit breaker
+
+## Lessons Learned
+1. New protocol implementations (HTTP/3) need circuit breakers to fall back gracefully.
+2. Connection pool exhaustion must not block fallback to older protocols.
+3. Lock contention in network stacks can cause total browser freeze — design lock-free paths.
+4. Browser-wide network outages need rapid update distribution mechanisms.

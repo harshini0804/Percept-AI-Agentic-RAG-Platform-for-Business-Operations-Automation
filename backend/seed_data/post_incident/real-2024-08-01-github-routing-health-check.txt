@@ -1,0 +1,36 @@
+# Incident: Config Change Breaks Database Health Check Routing
+Date: 2024-08-01
+Service: github-database
+Severity: P0
+Root Cause Tag: health-check-config-error
+
+## Summary
+A configuration change to GitHub.com databases altered how hosts answered routing-service health-check pings, causing the production read-only endpoint to be marked as unhealthy and inaccessible. With reads broken, the site was down for read operations for 36 minutes until the change was reverted.
+
+## Timeline
+- 18:30 UTC — Database configuration change rolled out
+- 18:32 UTC — Routing service health checks begin failing for read replicas
+- 18:33 UTC — Read-only endpoint marked unhealthy; GitHub.com read operations fail
+- 18:40 UTC — Engineering identifies health check failure as the issue
+- 18:50 UTC — Configuration change identified and reverted
+- 19:06 UTC — Health checks passing; read operations restored
+
+## Root Cause
+A configuration change deployed to GitHub's MySQL database hosts modified the way the database process responded to health check probes from the routing service. The new configuration caused the health check response to use a different format that the routing service did not recognize as "healthy." The routing service then marked all read-only replicas as unhealthy and stopped directing traffic to them. Since GitHub.com relies heavily on read replicas for serving page loads, the site became largely non-functional for read operations.
+
+## Impact
+- 36 minutes of degraded GitHub.com functionality
+- Repository browsing, issue viewing, and code search affected
+- Git clone and pull operations for public repositories impacted
+- Write operations (push, issue creation) continued working via the primary
+
+## Mitigation
+- Immediate: reverted the database configuration change
+- Short-term: added health check format validation to the deployment pipeline
+- Long-term: implemented health check response format testing as a deployment gate; added canary deployment for database configuration changes
+
+## Lessons Learned
+1. Health check response format changes must be coordinated with the routing service.
+2. Database configuration changes that affect health checks have platform-wide blast radius.
+3. Read-replica health is critical for read-heavy workloads — monitor health check success rate.
+4. Configuration changes to foundational services need canary deployment, not bulk rollout.

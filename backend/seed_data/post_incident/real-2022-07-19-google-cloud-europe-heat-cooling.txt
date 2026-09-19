@@ -1,0 +1,38 @@
+# Incident: Extreme Heat Causes Datacenter Cooling Failure
+Date: 2022-07-19
+Service: google-cloud-europe-west2
+Severity: P0
+Root Cause Tag: cooling-failure
+
+## Summary
+A simultaneous failure of multiple redundant cooling systems at a Google Cloud datacenter hosting europe-west2-a was caused by extreme external temperatures during a record heat wave. The cooling failure caused servers to overheat and shut down, impacting multiple Google Cloud services for customers in the Europe region.
+
+## Timeline
+- 06:33 PDT Jul 19 — Multiple cooling systems fail at europe-west2-a datacenter
+- 06:45 PDT — Server thermal shutdowns begin
+- 07:00 PDT — Google Cloud services in europe-west2-a degraded
+- 08:00 PDT — Affected services: Compute Engine, Cloud SQL, GKE in the zone
+- 12:00 PDT — Cooling systems partially restored
+- 16:00 PDT — Servers gradually brought back online
+- 18:00 PDT — Full service restoration
+
+## Root Cause
+A record heat wave in the UK pushed external temperatures well above the design parameters for the datacenter's cooling systems. Multiple redundant cooling units failed simultaneously because they all relied on the same ambient air temperature for heat dissipation. The cooling systems could not reject enough heat to maintain safe server operating temperatures. Servers engaged thermal protection and shut down automatically. The simultaneous nature of the failure (all cooling units affected by the same external temperature) defeated the redundancy design.
+
+## Impact
+- Multiple hours of service disruption in europe-west2-a
+- Compute Engine instances shut down
+- Cloud SQL databases unavailable
+- GKE pods evicted from affected nodes
+- Customers without multi-zone deployments experienced full outage
+
+## Mitigation
+- Immediate: reduced server load to lower heat generation; waited for external temperatures to drop
+- Short-term: brought servers back online gradually as cooling was restored
+- Long-term: upgraded cooling systems for higher ambient temperature tolerance; added liquid cooling for high-density racks; revised temperature design parameters for climate change projections
+
+## Lessons Learned
+1. Cooling system redundancy is defeated when all units share the same environmental dependency.
+2. Climate change is raising baseline temperatures — datacenter cooling must be designed for future extremes.
+3. Customers must use multi-zone deployments to survive zone-level physical events.
+4. Gradual server restart after thermal events prevents re-overheating from sudden load.

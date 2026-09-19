@@ -1,0 +1,38 @@
+# Incident: OS Thread Limit Exhaustion — Cascading Service Failures
+Date: 2020-11-25
+Service: aws-kinesis
+Severity: P0
+Root Cause Tag: resource-exhaustion
+
+## Summary
+Scaling the front-end cache fleet for AWS Kinesis caused all servers in the fleet to exceed the maximum number of threads allowed by an operating system configuration. This cascading failure brought down Kinesis and multiple dependent AWS services including CloudWatch, Lambda, Cognito, and others in the US-EAST-1 region for several hours.
+
+## Timeline
+- 02:44 UTC — Automated scaling activity adds new capacity to Kinesis front-end cache fleet
+- 02:50 UTC — New servers trigger OS thread limit; existing servers also exceed limit during communication with new nodes
+- 03:00 UTC — Kinesis API error rates spike; CloudWatch monitoring begins failing
+- 03:30 UTC — Lambda, Cognito, AppSync, and other services report elevated error rates
+- 06:30 UTC — Root cause identified as OS thread limit configuration
+- 08:15 UTC — Thread limits increased; Kinesis front-end fleet begins recovery
+- 10:23 UTC — Full recovery across all affected services
+
+## Root Cause
+The Kinesis front-end fleet uses a distributed architecture where each server maintains connections to many other servers in the fleet. When new capacity was added, the total number of threads required per server exceeded the operating system's configured thread limit. This caused the new servers to fail initialization and existing servers to crash when attempting to establish connections to the new nodes. Because CloudWatch depends on Kinesis for metrics ingestion, the monitoring system itself went down, severely hampering incident response. The thread limit had been set years earlier and had never been updated as the fleet grew.
+
+## Impact
+- ~7.5 hours of degraded/unavailable service for Kinesis and multiple dependent AWS services
+- CloudWatch down, meaning customers and AWS operators lost visibility into their systems
+- Lambda functions failed to execute; Cognito authentication broke for many applications
+- Thousands of AWS customers in US-EAST-1 were affected
+- Financial impact estimated in the hundreds of millions across affected businesses
+
+## Mitigation
+- Immediate: manually adjusted OS thread limits on affected servers; restarted fleet in controlled waves
+- Short-term: rolled back the scaling event; validated thread limits across all server types
+- Long-term: implemented proactive thread limit monitoring; decoupled CloudWatch's dependency on Kinesis; added pre-deployment capacity validation checks
+
+## Lessons Learned
+1. OS-level resource limits (threads, file descriptors, etc.) must be monitored and scaled alongside application capacity.
+2. Monitoring systems (CloudWatch) must not depend on the same infrastructure they monitor — circular dependencies are catastrophic.
+3. Scaling events should be gradual and validated, not all-at-once — add a small batch, validate, then continue.
+4. Capacity planning must account for the quadratic growth in inter-node connections as fleet size increases.

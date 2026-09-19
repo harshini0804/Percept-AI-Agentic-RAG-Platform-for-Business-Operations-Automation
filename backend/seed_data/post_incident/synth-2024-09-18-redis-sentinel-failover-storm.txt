@@ -1,0 +1,34 @@
+# Incident: Redis Sentinel Failover Storm — Session Service
+Date: 2024-09-18
+Service: session-service
+Severity: P1
+Root Cause Tag: redis-failure
+
+## Summary
+A network partition between Redis Sentinel nodes triggered repeated failover attempts, causing the session store to become unavailable for 40 minutes. Each failover attempt disrupted active client connections, and the rapid cycling between primaries prevented the cluster from stabilizing.
+
+## Timeline
+- 08:10 UTC — Network switch firmware update causes 200ms packet loss between Sentinel nodes
+- 08:11 UTC — Sentinel-1 loses quorum, initiates failover; promotes replica-2
+- 08:12 UTC — Network recovers; Sentinel-2 sees original primary as healthy, initiates reverse failover
+- 08:13–08:45 UTC — Failover cycling continues every 2-3 minutes; clients receive READONLY errors
+- 08:45 UTC — Network team identified and halted the firmware update
+- 08:50 UTC — Manual Sentinel reset; single primary stabilized
+
+## Root Cause
+The Sentinel failover timeout was set to 5 seconds (far too aggressive for a production environment). The 200ms packet loss during the switch firmware update was enough to trigger the failover threshold. Once the first failover completed and the network recovered, the Sentinels detected the "new" primary as unreachable from the other partition, triggering a reverse failover. This cycling repeated because the failover cooldown period (60 seconds) was shorter than the time needed for all Sentinels to converge on a consistent view.
+
+## Impact
+- 40 minutes of session store instability
+- ~12,000 users experienced session drops
+- 200+ support tickets filed
+
+## Mitigation
+- Immediate: manually reset Sentinel state and designated a single primary
+- Short-term: increased failover timeout to 30 seconds; increased cooldown to 180 seconds
+- Long-term: migrated to Redis Cluster mode with slot-based partitioning (eliminates single-primary failover entirely)
+
+## Lessons Learned
+1. Redis Sentinel failover timeout must be tuned for production network characteristics — 5 seconds is too aggressive.
+2. Failover cooldown must exceed the network convergence time, or cycling is inevitable.
+3. Network maintenance must be coordinated with infrastructure teams to avoid triggering cascading failovers.

@@ -1,0 +1,36 @@
+# Incident: Code Release Error Disables Service Token Management
+Date: 2023-01-24
+Service: cloudflare-workers
+Severity: P0
+Root Cause Tag: deployment-error
+
+## Summary
+Several Cloudflare services became unavailable for 121 minutes due to an error in releasing code that manages service tokens. The incident degraded Cloudflare's Workers platform, Zero Trust solution, and control plane functions in the CDN.
+
+## Timeline
+- 16:30 UTC — Code release for service token management deployed
+- 16:35 UTC — Service tokens begin failing validation
+- 16:45 UTC — Workers platform, Zero Trust, and CDN control plane report failures
+- 17:00 UTC — Engineering identifies service token code release as root cause
+- 18:00 UTC — Code release rolled back
+- 18:31 UTC — Full service restoration
+
+## Root Cause
+A code release to the service token management system contained a bug in the token validation logic. The new code changed the serialization format of service tokens but did not maintain backward compatibility with tokens already issued and in use. All existing service tokens failed validation against the new code, causing authentication failures across all services that depend on service tokens for inter-service communication.
+
+## Impact
+- 121 minutes of degraded service across multiple Cloudflare products
+- Workers platform: function invocations failing
+- Zero Trust: access policies not enforcing correctly
+- CDN control plane: configuration changes not propagating
+
+## Mitigation
+- Immediate: rolled back the service token code release
+- Short-term: implemented backward-compatible token serialization
+- Long-term: added token format compatibility testing to CI; implemented canary deployment for auth-critical services
+
+## Lessons Learned
+1. Authentication and token systems are the highest-blast-radius components — deploy with extreme caution.
+2. Serialization format changes must maintain backward compatibility during rollout.
+3. Inter-service authentication failures cascade to every dependent service simultaneously.
+4. Canary deployment for auth systems should verify both new and existing tokens work.

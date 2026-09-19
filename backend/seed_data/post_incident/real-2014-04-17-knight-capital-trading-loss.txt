@@ -1,0 +1,36 @@
+# Incident: Conflicting Deployed Code Versions Cause $460M Trading Loss
+Date: 2012-08-01
+Service: knight-capital-trading
+Severity: P0
+Root Cause Tag: deployment-conflict
+
+## Summary
+Knight Capital Group lost $460 million in 45 minutes due to a deployment error. A new trading algorithm was deployed to production servers, but one of eight servers still had legacy code that repurposed a previously used feature flag. The conflicting code versions caused the legacy server to execute millions of unintended trades at unfavorable prices.
+
+## Timeline
+- 09:30 EDT — NYSE market opens; Knight Capital's new trading system activates
+- 09:31 EDT — Legacy code on one server begins executing erratic trades
+- 09:32 EDT — Anomalous trading volume detected by market surveillance
+- 09:45 EDT — Knight Capital realizes the issue; begins investigation
+- 10:15 EDT — Affected server identified and trading halted
+- End of day — Knight Capital reports $460M in losses
+
+## Root Cause
+Knight Capital deployed a new market-making algorithm to its SMARS trading system across eight production servers. Seven servers received the new code correctly. The eighth server retained old code that included a defunct trading function triggered by the same feature flag ("Power Peg") being repurposed for the new algorithm. When the new algorithm activated the Power Peg flag, the eighth server executed the old defunct function, which rapidly bought and sold large equity positions at market prices without any of the intended risk controls. The deployment process had no validation that all servers were running the same code version.
+
+## Impact
+- $460 million in trading losses in approximately 45 minutes
+- Knight Capital's market capitalization dropped 75% in two days
+- The company required a $400M emergency investment to survive
+- Eventually acquired by Getco LLC
+
+## Mitigation
+- Immediate: halted all trading; unwound positions over following days
+- Short-term: implemented deployment validation across all servers
+- Long-term: industry-wide adoption of kill switches and pre-trade risk checks; SEC adopted Rule 15c3-5 requiring market access controls
+
+## Lessons Learned
+1. Deployment validation must confirm all nodes are running the same code version before activation.
+2. Feature flags must never be repurposed — retire old flags completely before reusing identifiers.
+3. Financial systems need automated kill switches that halt trading when losses exceed thresholds.
+4. The cost of a deployment process without validation can be measured in hundreds of millions.

@@ -1,0 +1,36 @@
+# Incident: Platform Migration Causes Extended DNS Disruption
+Date: 2022-01-15
+Service: enom-dns
+Severity: P0
+Root Cause Tag: migration-failure
+
+## Summary
+Enom's engineering team began planned maintenance to migrate their platform to a new cloud infrastructure. The complexity of the cutover caused continuous delays, with issues related to data replication, network routing, and DNS resolution that impacted website accessibility and email delivery for thousands of domains.
+
+## Timeline
+- 09:00 ET Jan 15 — Planned maintenance window begins
+- 12:00 ET — First issues with data replication delays observed
+- 18:00 ET — Maintenance window extended; network routing issues emerge
+- Jan 16 06:00 ET — DNS resolution failures reported by customers
+- Jan 16 18:00 ET — Partial restoration of DNS services
+- Jan 17 12:00 ET — Full service restoration confirmed
+
+## Root Cause
+The migration involved cutting over from legacy infrastructure to a new cloud platform in a single maintenance window. Multiple interdependent systems (database replication, network routing, DNS) needed to be migrated in sequence, but timing dependencies between them were not fully mapped. Data replication lag caused the new infrastructure to serve stale DNS records. Network routing changes created asymmetric paths that broke health checks. The cascade of issues extended the maintenance window far beyond the planned duration.
+
+## Impact
+- Multi-day disruption to DNS resolution for customer domains
+- Email delivery failures for domains using Enom's mail services
+- Website accessibility issues for thousands of registered domains
+- Customer trust damage for a domain registrar
+
+## Mitigation
+- Immediate: extended maintenance window and manually resolved routing conflicts
+- Short-term: completed migration with additional manual verification steps
+- Long-term: implemented blue-green migration strategy for future infrastructure changes; added canary DNS validation before cutover
+
+## Lessons Learned
+1. Complex infrastructure migrations should use blue-green or canary strategies, not big-bang cutovers.
+2. DNS migrations require especially careful planning due to TTL propagation delays.
+3. Maintenance windows for multi-system migrations must account for worst-case dependency chains.
+4. Customer communication during extended outages must be proactive and frequent.

@@ -1,0 +1,35 @@
+# Incident: Database Connection Pool Exhaustion — Analytics Service
+Date: 2024-06-12
+Service: analytics-service
+Severity: P1
+Root Cause Tag: db-pool-exhaustion
+
+## Summary
+The analytics service exhausted its PostgreSQL connection pool after a batch reporting job held connections open for 45+ minutes. All subsequent API requests to the analytics dashboard failed with "connection pool exhausted" errors for 22 minutes.
+
+## Timeline
+- 14:00 UTC — Scheduled daily batch report job starts, acquires 40 connections from the pool (pool max: 50)
+- 14:35 UTC — Interactive dashboard queries begin failing; only 10 connections remain, all occupied by slow batch queries
+- 14:37 UTC — Monitoring alerts fire: analytics-service connection pool at 100%
+- 14:42 UTC — On-call identifies batch job holding long-lived connections
+- 14:48 UTC — Batch job killed manually; connections released
+- 14:52 UTC — Pool recovers, dashboard queries resume
+- 15:00 UTC — All clear
+
+## Root Cause
+The batch reporting job was configured to run complex aggregation queries that each took 30-45 minutes. It acquired connections at startup and held them for the entire duration, never releasing them back to the pool. The connection pool was sized for interactive dashboard queries (short-lived, sub-second), not for batch workloads that hold connections for tens of minutes. No connection timeout or idle-connection reclaim was configured.
+
+## Impact
+- 22 minutes of analytics dashboard unavailability
+- 3 scheduled executive reports delayed
+- No data loss
+
+## Mitigation
+- Immediate: killed the batch job, freed pool connections
+- Short-term: moved batch reporting to a dedicated connection pool with its own 20-connection limit
+- Long-term: added connection idle timeout (5 min); added pool exhaustion alerting at 80% utilization
+
+## Lessons Learned
+1. Batch and interactive workloads must use separate connection pools — mixing them causes starvation.
+2. Connection pool exhaustion alerting should trigger at 80%, not 100%.
+3. Long-running queries should use dedicated read replicas, not the primary pool.

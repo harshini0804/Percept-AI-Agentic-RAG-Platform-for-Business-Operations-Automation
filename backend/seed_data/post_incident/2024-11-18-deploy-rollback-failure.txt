@@ -2,6 +2,7 @@
 Date: 2024-11-18
 Service: order-service
 Severity: P2
+Root Cause Tag: deployment-failure
 
 ## Summary
 A canary deployment of order-service v3.8.0 introduced a database migration that was not backward-compatible. When the canary showed elevated error rates and rollback was triggered, the rollback itself failed because the old code (v3.7.2) could not read the new database schema. Manual intervention was required to restore service.

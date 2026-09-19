@@ -1,0 +1,37 @@
+# Incident: JWT Validation Clock Skew — Mass User Logout
+Date: 2025-07-22
+Service: auth-gateway
+Severity: P1
+Root Cause Tag: auth-token-storm
+
+## Summary
+A Kubernetes node replacement introduced a 45-second clock skew on 3 of 12 API gateway pods. These pods rejected all existing JWT tokens as "expired," causing 25% of active users to be forcibly logged out. The logged-out users' re-authentication attempts created a 4x traffic spike on the auth service.
+
+## Timeline
+- 14:00 UTC — Kubernetes auto-scales, adding 3 new nodes to the API gateway pool
+- 14:02 UTC — New nodes have 45-second clock drift (cloud provider's NTP bootstrap delay)
+- 14:03 UTC — 25% of requests (those hitting new pods) receive 401 Unauthorized
+- 14:05 UTC — Users auto-redirected to login; auth service traffic spikes 4x
+- 14:10 UTC — Auth service latency increases from 100ms to 2.5s under load
+- 14:15 UTC — On-call correlates 401 spike with new node provisioning
+- 14:20 UTC — Tainted new nodes; traffic redirected to healthy pods
+- 14:25 UTC — NTP synced on new nodes; nodes untainted
+- 14:30 UTC — Full recovery
+
+## Root Cause
+The cloud provider's NTP bootstrap process on new Kubernetes nodes took up to 60 seconds. During this window, the nodes' clocks were skewed by 45 seconds. The API gateway's JWT validation checked `exp` (expiration) claims using the local system clock. Tokens with less than 45 seconds until expiration were incorrectly rejected as expired on the skewed nodes, while tokens with more than 45 seconds remaining passed validation on some requests and failed on others (depending on which pod handled the request).
+
+## Impact
+- 30 minutes of intermittent authentication failures (25% of requests)
+- ~50,000 users forcibly logged out
+- Auth service degraded under 4x normal re-authentication load
+
+## Mitigation
+- Immediate: tainted skewed nodes to stop routing traffic to them
+- Short-term: added NTP readiness check to Kubernetes pod startup probe (pod won't accept traffic until clock is synced)
+- Long-term: added 60-second clock skew tolerance to JWT validation; implemented pod-level clock drift monitoring
+
+## Lessons Learned
+1. Kubernetes pod readiness probes should include NTP synchronization status — never serve traffic with an unsynced clock.
+2. JWT validation must tolerate reasonable clock skew (30-60 seconds) across distributed nodes.
+3. Auto-scaling events are a common trigger for clock skew — validate NTP on every new node before accepting traffic.

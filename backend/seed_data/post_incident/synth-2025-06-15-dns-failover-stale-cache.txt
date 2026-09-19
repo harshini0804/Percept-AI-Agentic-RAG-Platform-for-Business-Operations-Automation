@@ -1,0 +1,36 @@
+# Incident: DNS Failover to Stale CNAME — CDN Edge Outage
+Date: 2025-06-15
+Service: cdn-edge
+Severity: P1
+Root Cause Tag: dns-config-error
+
+## Summary
+A DNS failover script activated a stale CNAME record pointing to a decommissioned CDN endpoint, causing 40% of static asset requests to fail for 35 minutes. The stale record had been left in the DNS zone file after a CDN migration 6 months earlier.
+
+## Timeline
+- 11:00 UTC — Primary CDN endpoint health check fails (routine certificate renewal in progress)
+- 11:01 UTC — Automated DNS failover script activates backup CNAME record
+- 11:02 UTC — Backup CNAME resolves to decomissioned CDN endpoint (taken offline 6 months ago)
+- 11:05 UTC — 40% of static asset requests (images, CSS, JS) return 502 errors
+- 11:10 UTC — Multiple page load failure reports from users
+- 11:15 UTC — On-call identifies the stale CNAME; primary CDN certificate renewal completes
+- 11:20 UTC — DNS failover reverted to primary CNAME
+- 11:35 UTC — DNS propagation complete; all assets loading
+
+## Root Cause
+During a CDN migration 6 months earlier, the old CDN endpoint was decommissioned but its CNAME record was left in the DNS zone file as a "backup." The automated failover script blindly activated whatever backup record existed without verifying that the target was actually reachable. No validation step existed between "activate backup DNS" and "confirm backup is serving traffic."
+
+## Impact
+- 35 minutes of partial static asset outage (40% of requests)
+- User-facing pages loaded without CSS/JS/images
+- ~15,000 user sessions affected
+
+## Mitigation
+- Immediate: reverted to primary CNAME after certificate renewal completed
+- Short-term: removed all stale DNS records; added health-check validation to the failover script (verify target responds 200 before switching)
+- Long-term: implemented DNS record inventory auditing (monthly); failover targets must pass a pre-activation health check
+
+## Lessons Learned
+1. DNS failover scripts must validate that the target endpoint is healthy before activating the switch.
+2. Decommissioned infrastructure must include DNS record cleanup as part of the decommission checklist.
+3. DNS zone files should be audited regularly for stale records — "backup" records pointing to dead endpoints are a latent risk.

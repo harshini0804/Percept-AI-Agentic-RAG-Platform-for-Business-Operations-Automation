@@ -1,0 +1,36 @@
+# Incident: WAF Regex CPU Exhaustion — Global Edge Network
+Date: 2019-07-02
+Service: cloudflare-waf
+Severity: P0
+Root Cause Tag: regex-backtracking
+
+## Summary
+A single WAF rule containing a poorly written regular expression caused excessive backtracking on Cloudflare's edge servers. CPU utilization spiked to 100% across all data centers, resulting in a global 27-minute outage affecting millions of websites proxied through Cloudflare. HTTP 502 errors were returned to all end users.
+
+## Timeline
+- 13:42 UTC — WAF managed rule change deployed globally
+- 13:45 UTC — CPU utilization spikes to 100% across edge servers worldwide
+- 13:52 UTC — Global traffic drop observed; Cloudflare status page updated
+- 14:00 UTC — Engineering identifies WAF as the source; begins global WAF kill
+- 14:02 UTC — WAF disabled globally, CPU returns to normal
+- 14:09 UTC — Full traffic recovery confirmed across all data centers
+
+## Root Cause
+A WAF rule update contained a regular expression with catastrophic backtracking behavior. The regex used nested quantifiers that, when matched against certain HTTP request payloads, caused the PCRE engine to enter an exponential-time evaluation loop. The rule was deployed globally without a staged rollout because the internal change was categorized as a low-risk rule update. The regex passed basic functional tests but was never evaluated for worst-case computational complexity.
+
+## Impact
+- 27 minutes of global outage (13:42–14:09 UTC)
+- All websites and APIs proxied through Cloudflare returned 502 errors
+- Millions of end users and businesses affected worldwide
+- Cloudflare's own dashboard and API were also down, slowing incident response
+
+## Mitigation
+- Immediate: disabled the WAF globally to restore service
+- Short-term: removed the offending rule and re-enabled WAF with remaining rules
+- Long-term: implemented regex complexity analysis in the CI pipeline; added staged rollout for all WAF rule changes; built a regex profiler to detect backtracking before deployment
+
+## Lessons Learned
+1. Regular expressions with nested quantifiers must be profiled for worst-case performance before deployment.
+2. Even "low-risk" rule changes should go through staged rollout — never deploy to 100% of edge instantly.
+3. The WAF deployment pipeline lacked computational complexity checks — these are now mandatory.
+4. Internal tooling (dashboard, API) should not depend on the same edge path as customer traffic.

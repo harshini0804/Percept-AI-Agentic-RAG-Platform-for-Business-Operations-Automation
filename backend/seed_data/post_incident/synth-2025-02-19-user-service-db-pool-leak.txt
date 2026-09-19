@@ -1,0 +1,35 @@
+# Incident: Database Connection Pool Leak — User Service
+Date: 2025-02-19
+Service: user-service
+Severity: P1
+Root Cause Tag: db-pool-exhaustion
+
+## Summary
+The user service experienced a gradual connection pool leak over 6 hours, eventually exhausting all 100 database connections. Login, registration, and profile update endpoints returned 503 errors for 18 minutes until the service was restarted.
+
+## Timeline
+- 03:00 UTC — Deployment of v2.14.0 with new user preference caching logic
+- 03:00–09:00 UTC — Connection pool usage slowly climbs from 20% to 95%
+- 09:12 UTC — Pool hits 100%; new requests begin queuing and timing out
+- 09:14 UTC — PagerDuty alert: user-service error rate >50%
+- 09:18 UTC — On-call identifies connection pool at max; suspects leak in new code
+- 09:25 UTC — Rolling restart initiated; connections released
+- 09:30 UTC — Service fully recovered
+
+## Root Cause
+The v2.14.0 release introduced a code path for user preference caching that opened a database connection inside a try block but failed to close it in the error path. When the external preference API returned an error (which happened ~2% of the time due to transient timeouts), the connection was leaked. Over 6 hours, ~80 connections accumulated as leaked.
+
+## Impact
+- 18 minutes of login/registration unavailability
+- ~5,000 users could not log in during the outage
+- No data loss or corruption
+
+## Mitigation
+- Immediate: rolling restart to release leaked connections
+- Short-term: patched the connection leak (added finally block); added connection pool utilization to the service dashboard
+- Long-term: adopted a connection pool wrapper that automatically closes connections after a max lifetime; added code-review checklist item for connection lifecycle in all DB-touching code
+
+## Lessons Learned
+1. Every database connection acquisition must have a corresponding close in a finally block — no exceptions.
+2. Slow connection leaks are harder to detect than sudden pool exhaustion; monitor pool utilization over time, not just at threshold.
+3. Canary deployments should run long enough (>1 hour) to catch slow-leak patterns, not just immediate errors.

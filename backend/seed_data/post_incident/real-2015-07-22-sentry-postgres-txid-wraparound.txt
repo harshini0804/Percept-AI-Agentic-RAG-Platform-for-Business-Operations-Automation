@@ -1,0 +1,36 @@
+# Incident: Transaction ID Wraparound — PostgreSQL Read-Only Emergency
+Date: 2015-07-22
+Service: sentry-database
+Severity: P1
+Root Cause Tag: txid-wraparound
+
+## Summary
+Sentry experienced an extended outage when PostgreSQL entered a protective read-only mode due to transaction ID wraparound. The database's autovacuum process had fallen behind on a high-write table, causing transaction IDs to approach the 2-billion wraparound limit. PostgreSQL automatically stopped accepting writes to prevent data corruption, taking Sentry offline for most of a working day.
+
+## Timeline
+- 09:30 UTC — Sentry API begins returning 500 errors on write operations
+- 09:45 UTC — Database team identifies PostgreSQL warnings about transaction ID age
+- 10:00 UTC — Confirmed: autovacuum has fallen behind; wraparound protection triggered
+- 10:30 UTC — Manual VACUUM FREEZE initiated on the affected tables
+- 15:00 UTC — VACUUM FREEZE completes on the largest table; writes resume
+- 16:30 UTC — Full service restored after vacuuming remaining tables
+
+## Root Cause
+PostgreSQL uses 32-bit transaction IDs that wrap around at approximately 2 billion. To prevent data loss, PostgreSQL enters a read-only "safety shutdown" mode when any table's oldest unfrozen transaction ID approaches the wraparound limit. Sentry's event ingestion table had extremely high write volume, and the autovacuum process was not configured aggressively enough to keep up. The default autovacuum settings were insufficient for the write pattern, and there was no monitoring on transaction ID age to provide early warning.
+
+## Impact
+- ~7 hours of outage (09:30–16:30 UTC) — no new error events could be ingested
+- All Sentry customers unable to see real-time errors in their applications
+- Backlog of unprocessed events accumulated during the outage
+- Significant data loss for events that exceeded retry/buffer limits
+
+## Mitigation
+- Immediate: ran manual VACUUM FREEZE on all tables approaching the wraparound limit
+- Short-term: tuned autovacuum parameters (more aggressive thresholds, more worker processes)
+- Long-term: added monitoring and alerting on transaction ID age (pg_stat_user_tables.age(relfrozenxid)); scheduled periodic manual VACUUM FREEZE during low-traffic windows
+
+## Lessons Learned
+1. Monitor transaction ID age (relfrozenxid) on every PostgreSQL instance — alert well before the 2-billion limit.
+2. Default autovacuum settings are not sufficient for high-write workloads — tune for your actual traffic pattern.
+3. VACUUM FREEZE on large tables takes hours — don't wait until it's an emergency to run it.
+4. This is a well-known PostgreSQL failure mode that catches many teams by surprise — it should be part of every PostgreSQL runbook.

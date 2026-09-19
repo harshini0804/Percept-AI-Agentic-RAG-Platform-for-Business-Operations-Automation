@@ -1,0 +1,37 @@
+# Incident: Service Discovery Config Error — Global Monitoring Outage
+Date: 2020-09-25
+Service: datadog-infrastructure
+Severity: P1
+Root Cause Tag: config-error
+
+## Summary
+A misconfiguration in one of Datadog's service discovery clients caused a cascading failure that brought down service discovery globally. When a dependent client went down, the bad configuration propagated through the service discovery cluster, causing all clients to lose their ability to discover and route to backend services. The irony of a monitoring company experiencing a monitoring outage was not lost on anyone.
+
+## Timeline
+- 14:00 UTC — Configuration update deployed to a service discovery client
+- 14:15 UTC — Dependent client begins failing due to misconfigured service registration
+- 14:30 UTC — Service discovery cluster experiences cascading deregistration of healthy services
+- 15:00 UTC — Global service discovery failure; Datadog's monitoring pipeline begins failing
+- 15:30 UTC — Root cause identified; manual service re-registration begins
+- 17:00 UTC — Service discovery cluster stabilized; monitoring pipeline recovering
+- 18:30 UTC — Full recovery confirmed (4.5 hours total)
+
+## Root Cause
+A service discovery configuration update for one client contained an incorrect health check definition. When the client's health check failed (due to the misconfiguration), the service discovery system deregistered the client. However, other clients had dependencies registered against the failed client, and the cascading deregistration logic propagated through the dependency graph, causing healthy services to also be deregistered. The service discovery system lacked circuit breakers for bulk deregistration events, and the configuration change was not validated against the full dependency graph before deployment.
+
+## Impact
+- ~4.5 hours of degraded to unavailable monitoring for Datadog customers globally
+- Customers unable to view dashboards, metrics, or receive alerts during the incident
+- Monitoring data during the outage window was delayed but not permanently lost
+- Significant reputational impact for a monitoring-as-a-service provider
+
+## Mitigation
+- Immediate: manually re-registered healthy services; isolated the misconfigured client
+- Short-term: added validation for health check configurations before deployment
+- Long-term: implemented circuit breakers for bulk deregistration; added dependency graph validation for configuration changes; built canary deployment for service discovery config
+
+## Lessons Learned
+1. Service discovery is critical infrastructure — config changes must go through staged rollout with dependency graph validation.
+2. Cascading deregistration is a dangerous failure mode — circuit breakers must prevent bulk removal of healthy services.
+3. Monitoring systems must have independent health checks that don't depend on the infrastructure they monitor.
+4. A monitoring company's outage is a uniquely painful trust violation — defense-in-depth matters most here.

@@ -1,0 +1,35 @@
+# Incident: Leap Second Causes DNS Resolver Panic
+Date: 2016-12-31
+Service: cloudflare-dns
+Severity: P1
+Root Cause Tag: time-handling-bug
+
+## Summary
+The 27th leap second (2016-12-31T23:59:60Z) caused backwards time flow in Cloudflare's DNS resolver (RRDNS). The weighted round-robin selection algorithm assumed monotonic time, but Go's time.Now() returned non-monotonic values during the leap second. This injected negative values into rand.Int63n(), which panics on negative input, causing DNS resolution failures.
+
+## Timeline
+- 23:59:60 UTC Dec 31 — Leap second occurs
+- 00:00:00 UTC Jan 1 — RRDNS processes begin panicking on CNAME lookups
+- 00:10 UTC — Monitoring detects elevated DNS failure rates
+- 00:30 UTC — Engineering identifies leap second as trigger
+- 00:45 UTC — Hotfix deployed: replaced time.Now() with monotonic clock source
+- 01:00 UTC — DNS resolution fully restored
+
+## Root Cause
+Cloudflare's RRDNS (round-robin DNS) resolver used Go's time.Now() to compute time deltas for weighted server selection. During the leap second, the system clock was adjusted backwards by one second by the NTP daemon. This caused time.Now() to return a value earlier than a previously recorded timestamp, producing a negative time delta. This negative value was passed to rand.Int63n(), which panics when given a negative argument. The panic crashed the DNS resolution path for CNAME lookups.
+
+## Impact
+- ~60 minutes of elevated DNS resolution failures
+- CNAME-based lookups most affected; direct A/AAAA queries less impacted
+- Customers using Cloudflare DNS experienced intermittent resolution failures
+
+## Mitigation
+- Immediate: deployed hotfix using monotonic clock source instead of wall clock
+- Short-term: added input validation before rand.Int63n() calls
+- Long-term: audited all time-dependent code for monotonic clock assumptions; Go 1.9 later added monotonic clock support to time.Now()
+
+## Lessons Learned
+1. Wall clock time can go backwards — always use monotonic clocks for elapsed time measurements.
+2. Leap seconds are predictable events — systems should be tested against them proactively.
+3. Panic-on-negative-input is a footgun in Go's rand package — guard against it.
+4. Time-sensitive code in critical path (DNS resolution) needs extra defensive programming.

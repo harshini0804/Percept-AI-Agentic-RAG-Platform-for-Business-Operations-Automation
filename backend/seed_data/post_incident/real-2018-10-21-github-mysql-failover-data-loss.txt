@@ -1,0 +1,37 @@
+# Incident: MySQL Failover with Cross-Continent Replication Lag — Data Inconsistency
+Date: 2018-10-21
+Service: github-mysql
+Severity: P0
+Root Cause Tag: database-failover
+
+## Summary
+A 43-second network partition during routine maintenance caused MySQL master failover at GitHub. The new master did not have several seconds of writes propagated to it because of cross-continent replication latency. This resulted in 24+ hours of degraded service while GitHub performed data reconciliation to maintain integrity.
+
+## Timeline
+- 22:52 UTC — Network partition occurs during routine maintenance
+- 22:54 UTC — MySQL orchestrator promotes a replica to master
+- 22:55 UTC — New master begins accepting writes; old master's final writes are orphaned
+- 23:02 UTC — GitHub engineers detect data divergence between old and new master
+- 23:07 UTC — Decision to halt writes and begin data reconciliation
+- Oct 22 00:00 UTC — Service partially restored with read-only mode on affected clusters
+- Oct 22 ~23:00 UTC — Full data reconciliation complete; normal operations resume
+
+## Root Cause
+GitHub's MySQL clusters used cross-continent replication for disaster recovery. During a routine maintenance event, a 43-second network partition triggered the automated orchestrator (Orchestrator) to promote a replica in a different data center to master. Because of the inherent cross-continent replication latency, the new master was missing several seconds of writes that had been committed to the old master but not yet replicated. Once the new master accepted writes, a fork in data history was created, requiring careful manual reconciliation.
+
+## Impact
+- 24+ hours of degraded service, with intermittent unavailability
+- Data integrity risk for pull requests, issues, and repository metadata written during the partition window
+- Engineering team worked around the clock to reconcile diverged data
+- GitHub's status page showed "Major Service Outage" for the longest period in its history at that time
+
+## Mitigation
+- Immediate: stopped writes to affected clusters; entered read-only mode
+- Short-term: identified all diverged rows between old and new master; reconciled data
+- Long-term: modified orchestrator policies to prevent promotion of replicas with excessive replication lag; moved toward same-region high-availability topology; improved monitoring of replication lag during maintenance windows
+
+## Lessons Learned
+1. Automated failover must account for replication lag — never promote a replica that is significantly behind the primary.
+2. Cross-continent replication introduces inherent latency that makes zero-data-loss failover impossible under network partitions.
+3. Maintenance windows should include pre-checks that confirm replication is fully caught up before proceeding.
+4. Data reconciliation tooling should exist before it's needed — building it during an incident is extremely costly.

@@ -1,0 +1,36 @@
+# Incident: BGP Prefix Ordering Error Causes Multi-Datacenter Outage
+Date: 2022-06-21
+Service: cloudflare-edge
+Severity: P0
+Root Cause Tag: bgp-config-error
+
+## Summary
+An incorrect ordering of disabled BGP advertised prefixes during planned maintenance caused malfunction across 19 Cloudflare data centers. The error affected a significant portion of global Cloudflare traffic for approximately 90 minutes.
+
+## Timeline
+- 06:27 UTC — Maintenance procedure begins; BGP prefix changes applied
+- 06:34 UTC — 19 data centers stop advertising correct prefixes
+- 06:45 UTC — Global traffic monitoring detects significant drops
+- 07:00 UTC — Root cause identified as BGP prefix ordering error
+- 07:25 UTC — Correct prefix ordering restored
+- 08:00 UTC — All 19 data centers fully operational
+
+## Root Cause
+During planned network maintenance, BGP advertised prefixes needed to be temporarily disabled and re-enabled in a specific order. The maintenance procedure specified the order incorrectly — prefixes were disabled in an order that caused dependent routes to be withdrawn before their parents were re-established. This created a routing black hole in 19 data centers where traffic was attracted to the data center but had no valid egress path. The procedure had been tested on a single data center but the prefix dependency chain differed across the 19 affected facilities.
+
+## Impact
+- ~90 minutes of outage across 19 data centers
+- Significant portion of global Cloudflare-proxied traffic affected
+- Websites and APIs behind Cloudflare returned connection errors
+- Multiple geographic regions impacted simultaneously
+
+## Mitigation
+- Immediate: restored correct BGP prefix ordering in affected data centers
+- Short-term: documented correct prefix dependency ordering for all data centers
+- Long-term: automated BGP prefix ordering validation in maintenance procedures; added per-datacenter prefix dependency mapping
+
+## Lessons Learned
+1. BGP prefix operations have complex dependency orders that differ across facilities.
+2. Maintenance procedures tested on one data center may not generalize to others.
+3. Automated validation of prefix ordering should be mandatory before BGP changes.
+4. Multi-datacenter operations need facility-specific validation, not one-size-fits-all procedures.

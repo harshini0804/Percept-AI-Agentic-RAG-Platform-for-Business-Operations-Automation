@@ -1,0 +1,38 @@
+# Incident: Metadata Storage Capacity Change Causes Cascading GCP Failure
+Date: 2019-03-12
+Service: google-cloud-storage
+Severity: P0
+Root Cause Tag: capacity-planning-error
+
+## Summary
+A configuration change intended to address an uptick in demand for metadata storage overloaded part of the blob lookup system, causing a cascading failure with user-visible impact to Gmail, Google Photos, Google Drive, and other GCP services dependent on blob storage.
+
+## Timeline
+- 11:30 PDT — Configuration change deployed to metadata storage system
+- 11:45 PDT — Blob lookup system begins experiencing elevated latency
+- 12:00 PDT — Cascading failures reach Gmail, Google Photos, Google Drive
+- 12:30 PDT — Google SRE identifies metadata storage as root cause
+- 13:00 PDT — Configuration change reverted
+- 14:00 PDT — Blob lookup system recovers; dependent services begin normalizing
+- 15:00 PDT — Full recovery across all affected services
+
+## Root Cause
+The metadata storage system for Google's blob storage received a configuration change intended to increase its capacity to handle growing demand. The change inadvertently altered the distribution of metadata across storage nodes in a way that concentrated hot keys on a small number of nodes. These nodes became overloaded, causing timeouts in the blob lookup layer. Since Gmail attachments, Google Photos images, and Google Drive files all depend on blob storage, the failure cascaded to these consumer-facing services.
+
+## Impact
+- ~3.5 hours of degraded performance across multiple Google services
+- Gmail: attachment uploads/downloads failing
+- Google Photos: images failing to load or upload
+- Google Drive: file access and upload failures
+- GCP Cloud Storage: elevated error rates for API calls
+
+## Mitigation
+- Immediate: reverted the metadata storage configuration change
+- Short-term: rebalanced metadata distribution across storage nodes
+- Long-term: added hot-key detection in metadata distribution system; implemented canary deployment for metadata configuration changes
+
+## Lessons Learned
+1. Metadata storage configuration changes can have outsized blast radius due to many dependent services.
+2. Hot-key concentration is a common failure mode when changing data distribution strategies.
+3. Foundational storage services need the most conservative deployment practices.
+4. Canary deployment is especially critical for changes that affect data distribution.

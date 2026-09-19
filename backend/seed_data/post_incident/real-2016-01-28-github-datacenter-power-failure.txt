@@ -1,0 +1,36 @@
+# Incident: Primary Datacenter Power Failure Causes Service Disruption
+Date: 2016-01-28
+Service: github-platform
+Severity: P0
+Root Cause Tag: power-failure
+
+## Summary
+GitHub experienced a service disruption when their primary datacenter lost power. The power failure affected GitHub.com, the API, and all Git operations. Recovery was complicated by the need to verify data integrity across distributed storage systems before bringing services back online.
+
+## Timeline
+- 08:52 UTC — Power failure detected at primary datacenter
+- 08:53 UTC — GitHub.com, API, and Git operations become unavailable
+- 09:10 UTC — Backup power systems partially online; storage verification begins
+- 10:00 UTC — Read-only mode enabled for GitHub.com
+- 11:30 UTC — Data integrity verification complete; full write operations restored
+- 12:00 UTC — Full service restoration confirmed
+
+## Root Cause
+A power failure at GitHub's primary datacenter caused an unclean shutdown of compute and storage systems. While backup power systems existed, the transition was not seamless, causing a brief period where servers and storage systems shut down ungracefully. The recovery required careful data integrity verification across distributed file systems and databases before services could be safely restored. The storage layer's consistency checks were the primary bottleneck in recovery.
+
+## Impact
+- ~3 hours of service disruption
+- GitHub.com, API, and Git push/pull operations unavailable
+- CI/CD pipelines worldwide that depend on GitHub were blocked
+- Open source community and enterprise customers affected equally
+
+## Mitigation
+- Immediate: restored power; ran storage consistency checks; brought services back in phases
+- Short-term: improved UPS and generator failover procedures
+- Long-term: enhanced datacenter power redundancy; reduced storage consistency check time; improved graceful degradation to read-only mode
+
+## Lessons Learned
+1. Power failover must be tested regularly with actual load, not just idle switchover tests.
+2. Storage consistency verification after unclean shutdown is the bottleneck — optimize it.
+3. Read-only degradation mode is valuable during recovery — implement it for all critical services.
+4. Single-datacenter concentration for a globally critical service is a significant risk.

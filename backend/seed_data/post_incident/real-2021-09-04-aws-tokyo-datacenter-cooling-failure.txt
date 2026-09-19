@@ -1,0 +1,38 @@
+# Incident: Datacenter Cooling Failure Causes EC2 Instance Shutdowns
+Date: 2021-09-04
+Service: aws-ec2-tokyo
+Severity: P0
+Root Cause Tag: cooling-system-failure
+
+## Summary
+A bug in a third-party datacenter control system caused an excessive number of interactions during a control-host failover, making the cooling control system unresponsive. While most of the datacenter correctly failed cooling into "max cooling" mode, a portion of cooling units shut down entirely. EC2 servers overheated and powered off. Cross-AZ impact occurred for customers using ALB with WAF or sticky sessions.
+
+## Timeline
+- 02:00 JST — Control host failover triggers in datacenter management system
+- 02:05 JST — Excessive PLC interactions cause cooling controller to become unresponsive
+- 02:15 JST — Cooling units in one section shut down instead of entering max cooling
+- 02:30 JST — Servers begin overheating; automatic thermal shutdown engaged
+- 03:00 JST — EC2 instances in affected AZ going offline
+- 05:00 JST — Manual cooling intervention; temperature begins dropping
+- 08:00 JST — Affected servers cooled and restarted
+- 10:00 JST — Full service restoration in AP-NORTHEAST-1
+
+## Root Cause
+A third-party datacenter management system had a bug in its control host failover logic. During failover, the system generated an excessive number of communications to the Programmable Logic Controllers (PLCs) managing the cooling infrastructure. The PLCs became overwhelmed and unresponsive. Most cooling units had a failsafe to enter "max cooling" mode when control was lost, but a subset of units were configured to shut down instead. Additionally, the operator-initiated "purge" mode (emergency cooling) also failed because the PLCs controlling the air handlers had become unresponsive. Servers in the affected zone overheated and triggered thermal shutdown protection.
+
+## Impact
+- EC2 instances in one Tokyo AZ powered off due to overheating
+- Customers using ALB with AWS WAF or sticky sessions saw cross-AZ impact
+- Multi-hour recovery as servers needed to cool before restarting
+- AP-NORTHEAST-1 availability degraded for ~8 hours
+
+## Mitigation
+- Immediate: manual cooling intervention; opened facility doors for emergency airflow
+- Short-term: restarted servers after temperature normalized
+- Long-term: fixed PLC failsafe configuration to always default to max cooling; limited control host failover communication rate; added independent temperature monitoring with direct cooling override
+
+## Lessons Learned
+1. Cooling system failsafes must always default to "max cooling," never "shutdown."
+2. PLC communication storms during failover can make critical infrastructure unresponsive.
+3. Emergency cooling override must work independently of the primary control system.
+4. Cross-AZ impact from ALB/WAF routing means single-AZ failures can affect multi-AZ deployments.

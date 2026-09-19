@@ -1,0 +1,37 @@
+# Incident: Parser Memory Leak — Private Data Exposure (Cloudbleed)
+Date: 2017-02-17
+Service: cloudflare-edge
+Severity: P0
+Root Cause Tag: memory-leak
+
+## Summary
+A bug in Cloudflare's HTML parser caused edge servers to leak private memory contents — including HTTP cookies, authentication tokens, API keys, and POST body data — into HTTP responses served to random users. The bug was dubbed "Cloudbleed" (after Heartbleed). The leaked data was cached by search engines, making some private data publicly accessible. The vulnerability had been silently leaking data for approximately 5 months before discovery.
+
+## Timeline
+- Sep 22, 2016 — Bug introduced in a parser migration (old Ragel parser to new cf-html parser)
+- Feb 17, 2017 — Google Project Zero researcher Tavis Ormandy discovers leaked data in search engine caches
+- Feb 17, 2017 — Cloudflare notified; begins investigation
+- Feb 18, 2017 — Cloudflare disables the three features triggering the bug (Email Obfuscation, Server-Side Excludes, Automatic HTTPS Rewrites)
+- Feb 18–23, 2017 — Cloudflare works with search engines to purge cached leaked data
+- Feb 23, 2017 — Full public disclosure and postmortem published
+
+## Root Cause
+During migration from an older HTML parser (based on Ragel) to a new one (cf-html), a pointer arithmetic bug caused a buffer over-read. When certain HTML tags were malformed or incomplete, the parser would read past the end of the buffer into adjacent memory. This adjacent memory contained data from other HTTP requests being processed on the same server — including cookies, authentication tokens, and POST bodies from other users. The bug was triggered by three specific features: Email Obfuscation, Server-Side Excludes, and Automatic HTTPS Rewrites. The leaked data was included in the HTTP response body and subsequently cached by search engines and CDN caches.
+
+## Impact
+- ~5 months of silent data leakage (September 2016 – February 2017)
+- Private data (cookies, auth tokens, API keys, POST bodies) leaked to random users
+- Leaked data cached by Google, Bing, and other search engines
+- Millions of Cloudflare-proxied websites potentially affected
+- All affected customers advised to rotate credentials and API keys
+
+## Mitigation
+- Immediate: disabled the three triggering features within hours of notification
+- Short-term: fixed the parser bug; worked with search engines to purge cached data
+- Long-term: implemented memory safety checks in the parser; added fuzzing to the CI pipeline for HTML parsing code; conducted a broader audit of memory safety across edge server code
+
+## Lessons Learned
+1. Memory safety bugs in edge/proxy infrastructure can leak data across tenant boundaries at massive scale.
+2. HTML parsers operating on untrusted input must be extensively fuzzed — standard unit tests will not catch buffer over-read edge cases.
+3. Data leakage bugs can be silent for months — proactive security auditing and fuzzing are essential, not just reactive incident response.
+4. Search engine caching amplifies data leakage — leaked data in HTTP responses gets cached and becomes publicly searchable.

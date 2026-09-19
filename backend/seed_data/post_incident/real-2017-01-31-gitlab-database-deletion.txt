@@ -1,0 +1,37 @@
+# Incident: Database Deletion by Tired Admin — 6 Hours of Data Lost
+Date: 2017-01-31
+Service: gitlab-com
+Severity: P0
+Root Cause Tag: human-error
+
+## Summary
+During an incident response to database replication lag, a tired GitLab engineer accidentally ran rm -rf on the production PostgreSQL data directory instead of the staging one. This deleted the primary database for GitLab.com. Recovery from backups revealed that multiple backup mechanisms had silently failed — pg_dump had been erroring for months, LVM snapshots were not configured for the database server, and S3 backups had never been tested. GitLab recovered using a 6-hour-old staging replica, permanently losing 6 hours of production data.
+
+## Timeline
+- 21:00 UTC Jan 31 — Replication lag alerts fire; engineer begins troubleshooting
+- 23:00 UTC — Engineer attempts to resync the staging replica by removing its data directory
+- 23:30 UTC — rm -rf executed against the production database directory instead of staging
+- 23:35 UTC — Engineer realizes the mistake within seconds; stops the command (300 GB of 310 GB already deleted)
+- 00:00 UTC Feb 1 — Backup recovery attempted: pg_dump backups found to be empty/erroring; LVM snapshots not configured
+- 06:00 UTC — Recovery from 6-hour-old staging replica begins
+- 18:00 UTC Feb 1 — GitLab.com restored from the staging replica; 6 hours of data permanently lost
+
+## Root Cause
+The proximate cause was human error: a fatigued engineer ran a destructive command against the wrong server during late-night incident response. The deeper cause was systemic: five independent backup and replication mechanisms had all silently failed or were never properly configured, leaving no reliable recovery path. pg_dump had been producing errors and empty backups. LVM snapshots were not set up on the database server. Azure disk snapshots were only configured for NFS, not PostgreSQL. S3 backups of the database had never been verified. The only surviving copy was a staging replica that was 6 hours behind.
+
+## Impact
+- 6 hours of production data permanently lost (issues, merge requests, comments, snippets, CI/CD data)
+- 18+ hours of total downtime for GitLab.com
+- Massive reputational damage; incident was livestreamed during recovery
+- Revealed that 5 out of 5 backup mechanisms had independently failed
+
+## Mitigation
+- Immediate: recovered from the 6-hour-old staging replica
+- Short-term: fixed all 5 backup mechanisms; verified backup integrity
+- Long-term: implemented automated backup verification (restore tests); added safeguards against running destructive commands on production; separated production and staging access controls
+
+## Lessons Learned
+1. Backups that are never tested are not backups — automated restore verification is essential.
+2. Multiple independent backup mechanisms can all fail silently — defense-in-depth requires verification, not just redundancy.
+3. Fatigued engineers should not perform destructive operations during late-night incident response — require pair review for production commands.
+4. Production and staging access should be clearly separated — it should be hard to accidentally target production.

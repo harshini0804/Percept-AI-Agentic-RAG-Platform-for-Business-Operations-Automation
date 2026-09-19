@@ -1,0 +1,37 @@
+# Incident: Lightning Strike Causes Persistent Disk Data Loss
+Date: 2015-07-09
+Service: google-compute-engine
+Severity: P0
+Root Cause Tag: power-failure
+
+## Summary
+Four successive lightning strikes on Google's European datacenter (europe-west1-b) caused loss of power to storage systems. I/O errors were observed on a subset of Standard Persistent Disks (HDDs), and permanent data loss occurred on a small fraction of those. This was one of the few incidents where a major cloud provider acknowledged permanent customer data loss.
+
+## Timeline
+- 09:19 UTC — First lightning strike hits datacenter power infrastructure
+- 09:19-09:23 UTC — Three additional strikes in rapid succession
+- 09:25 UTC — UPS and generator systems engage; partial power restoration
+- 09:30 UTC — Storage system I/O errors detected on HDDs
+- 10:00 UTC — GCE instances in europe-west1-b experiencing disk errors
+- 12:00 UTC — Full power restored; disk integrity checks begin
+- 14:00 UTC — Permanent data loss confirmed on 0.000001% of disk space
+
+## Root Cause
+Four lightning strikes in rapid succession overwhelmed the datacenter's power protection systems. While UPS and generator systems engaged, the rapid sequential strikes caused a brief period of power instability that was outside the design parameters of the storage controllers. Some HDD write heads were in the process of writing when power fluctuated, causing physical platter damage. The affected HDDs had data that had not yet been replicated to other zones, resulting in permanent data loss for a small fraction of Standard Persistent Disks.
+
+## Impact
+- Temporary I/O errors on a subset of Standard Persistent Disks in europe-west1-b
+- Permanent data loss on a very small fraction (0.000001%) of disk space
+- GCE instances using affected disks experienced errors and required disk replacement
+- Customer data that was not backed up to other zones was unrecoverable
+
+## Mitigation
+- Immediate: replaced failed HDDs; restored data from replicas where available
+- Short-term: notified affected customers of data loss
+- Long-term: upgraded lightning protection systems; improved power isolation between successive strikes; recommended customers use multi-zone replication for critical data
+
+## Lessons Learned
+1. Rapid successive lightning strikes can overwhelm datacenter power protection designed for single events.
+2. Standard Persistent Disks (non-replicated) are vulnerable to zone-level physical events.
+3. Customers must use multi-zone replication for data they cannot afford to lose.
+4. Even cloud providers cannot guarantee zero data loss against extreme physical events.

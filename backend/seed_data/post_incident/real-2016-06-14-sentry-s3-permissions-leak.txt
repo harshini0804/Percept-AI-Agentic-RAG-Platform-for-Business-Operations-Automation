@@ -1,0 +1,32 @@
+# Incident: S3 Bucket Permissions Misconfiguration — Data Exposure
+Date: 2016-06-14
+Service: sentry-backups
+Severity: P1
+Root Cause Tag: misconfigured-permissions
+
+## Summary
+Wrong Amazon S3 settings on Sentry backup buckets exposed backup data to unauthorized access. The misconfiguration was discovered during a routine security audit and immediately remediated.
+
+## Timeline
+- 2016-06-12 — Security audit identifies S3 backup bucket with overly permissive ACL
+- 2016-06-12 — Permissions locked down within 1 hour of discovery
+- 2016-06-14 — Public incident report published with full transparency
+
+## Root Cause
+The S3 bucket used for storing database backups was configured with an overly permissive Access Control List (ACL). The bucket was created during an infrastructure migration and the permissions were set to "public-read" instead of "private." The error went undetected because the team's infrastructure-as-code tooling did not include S3 ACL validation in its CI checks, and the bucket was not covered by the organization's existing S3 security audit scope.
+
+## Impact
+- Backup data was potentially accessible to unauthorized parties for an unknown period
+- No evidence of actual unauthorized access was found during forensic analysis
+- Customer trust and confidence affected
+
+## Mitigation
+- Immediate: changed S3 bucket ACL to private; rotated all credentials that could have been in backups
+- Short-term: conducted full audit of all S3 buckets across all AWS accounts
+- Long-term: added automated S3 ACL scanning to CI pipeline; enforced S3 Block Public Access at the account level; added CloudTrail logging for all S3 operations
+
+## Lessons Learned
+1. S3 bucket permissions must be validated as part of infrastructure-as-code CI/CD pipelines.
+2. "Public-read" should never be the default — use S3 Block Public Access at the AWS account level.
+3. Backup buckets are high-value targets and should have the strictest access controls.
+4. Regular security audits of cloud storage configurations should be scheduled and automated.

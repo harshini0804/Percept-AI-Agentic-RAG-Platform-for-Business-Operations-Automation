@@ -1,0 +1,36 @@
+# Incident: Bot Detection System Output Exceeds Processing Limits
+Date: 2025-11-18
+Service: cloudflare-edge
+Severity: P0
+Root Cause Tag: file-size-limit
+
+## Summary
+A change in permissions in Cloudflare's bot-detection database caused a generated file to exceed the size limits of the processing software. This oversized file was propagated throughout Cloudflare's global network, causing a system-wide outage.
+
+## Timeline
+- 10:00 UTC — Database permissions change applied to bot-detection system
+- 10:05 UTC — Next scheduled file generation produces oversized output
+- 10:10 UTC — Oversized file propagated to edge servers globally
+- 10:15 UTC — Edge processing software fails on oversized file; requests fail
+- 10:30 UTC — Engineering identifies oversized file as root cause
+- 10:45 UTC — File removed from propagation; edge servers recover
+- 11:00 UTC — Full service restoration
+
+## Root Cause
+Cloudflare's bot-detection system generates data files that are distributed to all edge servers for real-time request classification. A permissions change in the database backing this system caused the file generation query to return significantly more data than intended — the query now included data that was previously excluded by row-level security. The resulting file exceeded the size limit of the Lua-based processing software on the edge servers, causing them to crash when attempting to load it. Because the file was distributed globally before the issue was detected, all edge servers were affected simultaneously.
+
+## Impact
+- System-wide outage affecting all Cloudflare-proxied traffic
+- All websites and APIs behind Cloudflare returned errors
+- Duration: approximately 60 minutes
+
+## Mitigation
+- Immediate: removed the oversized file from the distribution pipeline
+- Short-term: reverted the database permissions change
+- Long-term: added file size validation before distribution; implemented progressive rollout for bot-detection data updates
+
+## Lessons Learned
+1. Database permissions changes can have unexpected downstream effects on data volume.
+2. Generated files distributed globally must have size validation gates before propagation.
+3. Edge processing software must handle oversized input gracefully, not crash.
+4. Global distribution of data files needs progressive rollout, same as code deployments.

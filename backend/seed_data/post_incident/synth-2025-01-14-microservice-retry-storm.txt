@@ -1,0 +1,38 @@
+# Incident: Retry Storm Cascading Failure — Order Processing Pipeline
+Date: 2025-01-14
+Service: order-processing
+Severity: P0
+Root Cause Tag: cascading-timeout
+
+## Summary
+A brief 30-second outage of the payment validation service triggered an exponential retry storm across the order processing pipeline, amplifying load 50x and causing a 70-minute cascading failure across payment, inventory, and notification services.
+
+## Timeline
+- 13:00 UTC — Payment validation service restarts for routine deployment (30-second downtime)
+- 13:01 UTC — Order service retries failed payment calls; retry policy: 3 retries with 1-second fixed delay
+- 13:02 UTC — 3x amplification: each of 500 in-flight orders retries 3 times = 1,500 requests/second to payment service
+- 13:03 UTC — Payment service overwhelmed on restart; responds slowly; order service retries again
+- 13:05 UTC — Retry cascade reaches inventory service (order service retries full order flow, including inventory reservation)
+- 13:10 UTC — All three services at 100% CPU; error rates >90%
+- 13:15 UTC — On-call sheds load by blocking new orders at the load balancer
+- 13:30 UTC — Services stabilize after retry backlog drains
+- 14:10 UTC — Full recovery; order processing resumed
+
+## Root Cause
+The order processing service used a fixed-delay retry policy (3 retries, 1-second interval) with no jitter, no exponential backoff, and no circuit breaker. When the payment service went down for 30 seconds, all in-flight orders retried simultaneously, creating a synchronized thundering herd. The retry amplification factor was multiplicative: each service in the chain retried independently, so a 3x retry at each of 3 layers produced 27x total amplification.
+
+## Impact
+- 70 minutes of order processing unavailability
+- ~8,000 orders delayed or failed
+- Revenue impact: ~$120K in delayed order processing
+
+## Mitigation
+- Immediate: blocked new orders to let the backlog drain
+- Short-term: switched to exponential backoff with jitter (base 2s, max 30s, ±50% jitter)
+- Long-term: implemented circuit breakers at each service boundary; added retry budget (max 10% of traffic as retries); deployed a dead-letter queue for orders that exhaust retries
+
+## Lessons Learned
+1. Fixed-delay retries without jitter guarantee thundering herds — always use exponential backoff with jitter.
+2. Retry amplification in multi-layer architectures is multiplicative, not additive — a 3x retry at 3 layers is 27x, not 9x.
+3. Circuit breakers must exist at every service boundary to prevent cascade propagation.
+4. Brief planned maintenance must not trigger cascading failures — design for graceful degradation during restarts.

@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.pyc
 .venv/
@@ -18,4 +18,4 @@ dist/
 uploads/submitted/
 uploads/staging/dummy/
 uploads/staging/contract_tracking/
-uploads/staging/post_incident/  
+uploads/staging/post_incident/

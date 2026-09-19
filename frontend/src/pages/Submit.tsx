@@ -10,10 +10,11 @@ import { submitRun, submitRunWithFile } from "../api/agentRuns";
 // and contract_tracking (Vertical 3, Section 8.3) extracts date-bound
 // obligations from a contract into a structured timeline.
 const AVAILABLE_VERTICALS = [
-  { value: "dummy", label: "Dummy (test vertical)" },
+  { value: "post_incident", label: "Post-Incident Knowledge Synthesis (Vertical 1)" },
   { value: "internal_mobility", label: "Internal Mobility & Skill-Gap Matching" },
-  { value: "meeting_action_items", label: "Meeting Action Items" },
   { value: "contract_tracking", label: "Contract Obligation & Renewal Tracking" },
+  { value: "meeting_action_items", label: "Meeting Action Items" },
+  { value: "dummy", label: "Dummy (test vertical)" },
 ];
 
 function Submit() {

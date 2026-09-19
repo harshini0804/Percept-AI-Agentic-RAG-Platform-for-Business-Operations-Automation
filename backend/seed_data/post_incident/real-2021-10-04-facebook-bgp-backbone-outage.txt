@@ -1,0 +1,38 @@
+# Incident: BGP Backbone Configuration Error — Global Platform Outage
+Date: 2021-10-04
+Service: facebook-backbone
+Severity: P0
+Root Cause Tag: config-error
+
+## Summary
+Configuration changes to Facebook's backbone routers caused a complete withdrawal of BGP routes, making Facebook, Instagram, WhatsApp, and Messenger unreachable globally for approximately 6 hours. The outage also took down internal tools, preventing engineers from diagnosing and resolving the issue remotely.
+
+## Timeline
+- 15:39 UTC — Configuration change issued to backbone routers during routine maintenance
+- 15:40 UTC — BGP peering sessions dropped; DNS servers became unreachable
+- 15:51 UTC — External monitoring confirms total Facebook platform unreachability
+- 16:00 UTC — Engineers unable to access internal tools remotely; dispatch teams to data centers
+- 17:30 UTC — Physical access to data center routers established
+- 21:00 UTC — BGP routes restored; services begin recovering
+- 22:05 UTC — Full service restoration confirmed
+
+## Root Cause
+A routine maintenance command intended to assess backbone capacity inadvertently withdrew all BGP route advertisements from Facebook's backbone routers. The audit tool that should have caught the error contained a bug that failed to validate the command before execution. Once BGP routes were withdrawn, Facebook's DNS servers became unreachable from the internet. Because Facebook's internal tooling (remote access systems, ticketing, communication) relied on the same backbone infrastructure, engineers lost the ability to diagnose or remediate remotely and had to physically travel to data centers.
+
+## Impact
+- ~6 hours of total global outage across Facebook, Instagram, WhatsApp, and Messenger
+- Estimated 3.5 billion users affected
+- Facebook stock dropped ~5%, estimated $60 billion in market value
+- Internal communication (Workplace, remote access) also down, severely slowing response
+- Cascading DNS failures observed across third-party services relying on Facebook's infrastructure
+
+## Mitigation
+- Immediate: engineers physically accessed data center routers to restore BGP configuration
+- Short-term: re-established peering sessions and validated route propagation
+- Long-term: redesigned audit tooling to simulate and validate configuration changes before execution; separated management plane from production backbone; implemented out-of-band access for emergency scenarios
+
+## Lessons Learned
+1. Management plane and production data plane must be on independent infrastructure — losing production should never lock out operators.
+2. Configuration audit tools must simulate changes and require explicit approval for route-withdrawal operations.
+3. Out-of-band emergency access (e.g., satellite, cellular) is critical for facilities housing core network infrastructure.
+4. A single mis-issued command should never be able to take down an entire global network — blast radius must be limited by design.

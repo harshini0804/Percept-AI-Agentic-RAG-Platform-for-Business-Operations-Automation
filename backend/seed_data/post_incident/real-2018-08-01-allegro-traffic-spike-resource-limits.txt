@@ -1,0 +1,35 @@
+# Incident: E-Commerce Traffic Spike — Cluster Resource Misconfiguration
+Date: 2018-08-01
+Service: allegro-platform
+Severity: P0
+Root Cause Tag: config-error
+
+## Summary
+Allegro, a major European e-commerce platform, went down after a sudden traffic spike caused by a marketing campaign. The cluster resource management system had a configuration error that prevented additional service instances from starting despite available hardware resources.
+
+## Timeline
+- 10:00 CEST — Marketing campaign launches, traffic increases 4x normal levels
+- 10:08 CEST — Auto-scaling triggers but new instances fail to start
+- 10:15 CEST — Existing instances become overwhelmed; HTTP 503 errors begin
+- 10:45 CEST — Root cause identified: cluster resource manager config error
+- 11:20 CEST — Configuration corrected; new instances start provisioning
+- 11:45 CEST — Full service restoration
+
+## Root Cause
+The cluster resource management system (Mesos/Marathon) had a configuration error that specified an incorrect resource constraint for new service instances. The constraint referenced a host attribute that didn't exist in the cluster's newer nodes, so the scheduler could never find a valid placement for new instances. The error was introduced during a cluster expansion weeks earlier and went undetected because organic traffic never triggered the auto-scaler to the point where existing capacity was insufficient.
+
+## Impact
+- ~1.5 hours of degraded or unavailable service during a high-traffic marketing event
+- Revenue loss from failed transactions during the outage window
+- Customer frustration and abandoned shopping carts
+
+## Mitigation
+- Immediate: corrected the resource constraint configuration; manually scaled instances
+- Short-term: added synthetic load tests that exercise auto-scaling to max capacity
+- Long-term: implemented pre-campaign capacity validation checklist; added monitoring for auto-scaler placement failures
+
+## Lessons Learned
+1. Auto-scaling must be tested end-to-end regularly, not just assumed to work because it succeeded in the past.
+2. Cluster expansions that add new node types must include validation that existing placement constraints still resolve.
+3. Marketing campaigns that drive traffic spikes should trigger pre-event capacity checks.
+4. Configuration errors in orchestration systems can be silent until a stress event exposes them.

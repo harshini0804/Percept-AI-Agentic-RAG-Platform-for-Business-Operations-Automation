@@ -1,0 +1,37 @@
+# Incident: PostgreSQL Connection Saturation — Checkout Flow
+Date: 2026-09-05
+Service: checkout-service
+Severity: P1
+
+## Summary
+The checkout service became completely unresponsive for 52 minutes when all PostgreSQL connections in the pool were consumed by a long-running analytics query that was accidentally routed to the primary database instead of the read replica. The connection pool reached 100% utilization and all subsequent checkout requests queued indefinitely until the pool timeout was reached, returning 503 errors to customers.
+
+## Timeline
+- 16:30 UTC — Analytics team triggers a quarterly revenue aggregation report
+- 16:32 UTC — Report query begins executing against the primary database (misconfigured connection string)
+- 16:35 UTC — Query acquires advisory locks and begins a sequential scan on the orders table (180M rows)
+- 16:40 UTC — Connection pool utilization reaches 95%; checkout p99 latency spikes to 12s
+- 16:45 UTC — Pool saturated at 50/50 connections; new checkout requests return 503
+- 16:50 UTC — On-call paged; identifies the runaway analytics query via pg_stat_activity
+- 16:55 UTC — Query killed with pg_terminate_backend(); connections begin draining
+- 17:22 UTC — Pool fully recovered; checkout latency returns to baseline
+
+## Root Cause
+The analytics team's quarterly report was configured to use an environment variable for the database connection string. During a recent infrastructure migration, the environment variable was updated for the production API servers but not for the analytics job runner. The job runner's connection string still pointed to the primary database instead of the read replica. The analytics query performed a full sequential scan with advisory locks on the 180-million-row orders table, consuming connections for the duration of the scan (~45 minutes). The checkout service's connection pool had no priority separation between transactional and analytical workloads.
+
+## Impact
+- 52 minutes of checkout outage (16:30–17:22 UTC)
+- ~8,500 failed checkout attempts
+- Estimated revenue impact: $340,000
+- 2 SLA breach notifications to enterprise customers
+
+## Mitigation
+- Immediate: killed the runaway analytics query; restarted connection pool
+- Short-term: fixed the analytics job runner's connection string to point to read replica; added pg_stat_activity monitoring alert for queries running longer than 5 minutes on primary
+- Long-term: implemented separate connection pools for transactional vs. analytical workloads; added read-only enforcement on analytics database credentials; set statement_timeout = '300s' on the primary database
+
+## Lessons Learned
+1. Analytical and transactional workloads must use separate connection pools — a single shared pool means one bad query can take down the entire service.
+2. Database connection strings should be validated at deploy time, not just at service startup — drift between environments is a common failure mode.
+3. Advisory locks on large tables are dangerous — analytics queries should never acquire locks on production tables.
+4. Connection pool saturation at 80% should trigger an alert, not just when the pool is fully exhausted.

@@ -1,0 +1,37 @@
+# Incident: OAuth Token Refresh Infinite Loop — Mobile API
+Date: 2025-05-10
+Service: mobile-api-gateway
+Severity: P1
+Root Cause Tag: auth-token-storm
+
+## Summary
+A clock skew issue between the auth server and mobile API gateway caused OAuth refresh tokens to be rejected as "not yet valid," triggering an infinite refresh loop from mobile clients. The auth server received 50x normal traffic for 25 minutes.
+
+## Timeline
+- 07:00 UTC — Auth server VM migrated to new host; NTP sync delayed by 90 seconds
+- 07:02 UTC — Auth server issues tokens with `nbf` (not-before) timestamp 90 seconds in the future
+- 07:05 UTC — Mobile API gateway rejects new tokens: "token not yet valid"
+- 07:06 UTC — Mobile clients automatically retry token refresh (built-in SDK behavior)
+- 07:08 UTC — Auth server load increases 50x as millions of mobile clients enter refresh loop
+- 07:15 UTC — Auth server begins shedding load; 503 errors cascade
+- 07:20 UTC — On-call identifies clock skew via NTP monitoring
+- 07:25 UTC — NTP force-sync applied; clock skew resolved
+- 07:27 UTC — Mobile clients obtain valid tokens; traffic normalizes
+
+## Root Cause
+The auth server's VM migration disrupted NTP synchronization, causing its system clock to drift 90 seconds ahead. Tokens issued during this window had a `nbf` claim set to "now" (which was 90 seconds in the future from the API gateway's perspective). The API gateway correctly rejected these tokens, but the mobile SDK's retry logic had no backoff — it immediately retried the refresh on any auth failure, creating an infinite loop.
+
+## Impact
+- 25 minutes of mobile app authentication failures
+- ~2 million failed refresh attempts
+- Auth server at 100% CPU during the incident
+
+## Mitigation
+- Immediate: forced NTP sync on auth server
+- Short-term: added 120-second clock skew tolerance to token validation; added exponential backoff to mobile SDK refresh logic
+- Long-term: implemented continuous NTP drift monitoring with alerting at >5 seconds; added token validation clock skew tolerance as a configurable parameter
+
+## Lessons Learned
+1. Token validation must include a clock skew tolerance window — strict timestamp comparison breaks during VM migrations.
+2. Client-side retry logic must include exponential backoff — immediate retry on auth failure guarantees stampede.
+3. NTP synchronization must be monitored continuously, especially after VM migrations.

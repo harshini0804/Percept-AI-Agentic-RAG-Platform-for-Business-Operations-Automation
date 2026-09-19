@@ -1,0 +1,35 @@
+# Incident: ZooKeeper Reprovisioning Causes Kafka Split Brain
+Date: 2020-10-21
+Service: github-background-jobs
+Severity: P1
+Root Cause Tag: split-brain
+
+## Summary
+During routine ZooKeeper reprovisioning at GitHub, replacement hosts were added too quickly and elected a second leader, creating two distinct ZooKeeper clusters. A Kafka broker connected to the new cluster and elected itself controller, causing two Kafka clusters to serve conflicting state to clients. Approximately 10% of background-job writes failed for over 2.5 hours.
+
+## Timeline
+- 14:00 UTC — ZooKeeper reprovisioning begins; old hosts retired, new hosts added
+- 14:10 UTC — New ZooKeeper hosts elect separate leader (split brain)
+- 14:15 UTC — Kafka broker connects to new ZK cluster; becomes second controller
+- 14:20 UTC — Conflicting Kafka state causes background job failures
+- 14:45 UTC — Split brain identified; remediation begins
+- 16:52 UTC — ZooKeeper cluster unified; Kafka state reconciled; full recovery
+
+## Root Cause
+During ZooKeeper cluster reprovisioning, new nodes were added to the ensemble before old nodes were fully decommissioned. The timing created a window where enough new nodes existed to form a quorum independent of the existing cluster. A separate leader election occurred, creating two ZooKeeper clusters. A Kafka broker happened to connect to the new cluster and was elected as a second controller, causing partition leadership conflicts across the Kafka cluster. Background jobs that wrote to Kafka received inconsistent responses depending on which controller they reached.
+
+## Impact
+- ~2.5 hours of degraded background job processing
+- ~10% of background-job writes failed
+- GitHub Actions, webhooks, and notification delivery affected
+
+## Mitigation
+- Immediate: manually decommissioned extra ZK nodes to unify the cluster
+- Short-term: reconciled Kafka partition leadership
+- Long-term: implemented one-at-a-time ZK node replacement; added ZK cluster health validation between node additions
+
+## Lessons Learned
+1. ZooKeeper ensemble changes must be done one node at a time to prevent split brain.
+2. Kafka split-brain produces silent data inconsistencies that are difficult to detect.
+3. Cluster reprovisioning procedures need automated health checks between each step.
+4. Background job systems should be designed to tolerate and retry on transient Kafka failures.

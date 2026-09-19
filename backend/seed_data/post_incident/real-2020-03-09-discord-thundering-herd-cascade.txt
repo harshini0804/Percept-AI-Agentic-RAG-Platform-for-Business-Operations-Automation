@@ -1,0 +1,37 @@
+# Incident: Thundering Herd Reconnection — Service Cascading Failure
+Date: 2020-03-09
+Service: discord-gateway
+Severity: P1
+Root Cause Tag: cascading-failure
+
+## Summary
+A flapping internal service at Discord caused a thundering herd reconnection pattern. When the service came back up, all dependent clients simultaneously attempted to reconnect, overwhelming front-end services. The front-end services ran out of memory due to internal queues filling up, causing a cascading failure across Discord's infrastructure. Users experienced inability to send messages, join voice channels, or connect to Discord for approximately 3 hours.
+
+## Timeline
+- 14:00 UTC — Internal session service begins flapping (up-down-up-down)
+- 14:05 UTC — Dependent services detect failures and begin queuing reconnection attempts
+- 14:10 UTC — Session service stabilizes, triggering simultaneous reconnection from all clients
+- 14:15 UTC — Front-end API and gateway servers hit memory limits due to queued connections
+- 14:30 UTC — Cascading OOM kills across the gateway fleet
+- 15:30 UTC — Engineering implements connection rate limiting at the load balancer
+- 17:00 UTC — Full service recovery after controlled, throttled reconnection
+
+## Root Cause
+An internal service responsible for managing user sessions experienced intermittent failures (flapping). When it recovered, all clients whose sessions had been interrupted attempted to reconnect simultaneously — a classic thundering herd. Discord's front-end gateway servers did not have connection rate limiting or backpressure mechanisms. Each incoming connection attempt was queued in memory, and the simultaneous flood of reconnections caused memory exhaustion (OOM) on the gateway servers, which crashed and triggered even more reconnections from their displaced clients.
+
+## Impact
+- ~3 hours of service disruption for all Discord users
+- Complete inability to send messages, join voice channels, or load servers
+- Gateway server fleet experienced cascading OOM crashes
+- Bot and integration traffic contributed to the reconnection storm
+
+## Mitigation
+- Immediate: implemented emergency connection rate limiting at load balancers
+- Short-term: added exponential backoff with jitter to client reconnection logic
+- Long-term: built backpressure mechanisms into gateway servers; added circuit breakers for session service dependencies; implemented graceful degradation under load
+
+## Lessons Learned
+1. Thundering herd is a predictable failure pattern — every service recovery should be designed to handle simultaneous reconnection.
+2. Client-side exponential backoff with jitter is essential; server-side rate limiting alone is not sufficient.
+3. Memory-based queuing without bounds is dangerous — always set explicit limits on in-memory queue sizes.
+4. Flapping services should be detected and circuit-broken before they trigger cascading reconnection storms.

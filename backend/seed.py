@@ -21,6 +21,7 @@ from app.core.ingestion import ingest_staging_folder, STAGING_ROOT
 from app.verticals.contract_tracking.seed_local import seed_contract_tracking
 from app.verticals.internal_mobility.seed_local import seed_internal_mobility
 from app.verticals.meeting_action_items.seed_local import seed_meeting_action_items
+from app.verticals.post_incident.seed_local import seed_post_incident
 
 # Synthetic data committed to the repo under backend/seed_data/,
 # copied into each vertical's staging folder before ingestion. Only
@@ -38,9 +39,12 @@ SEED_DATA_ROOT = Path(__file__).parent / "seed_data"
 # the analysis trigger, so seeding must run the real extraction
 # pipeline, not generic chunk-and-embed) — see
 # app.verticals.contract_tracking.seed_local.
+# post_incident is handled by seed_post_incident() (dedicated
+# section-aware seeding — it must use the same section_chunker()
+# and source_id linkage as graph.py's runtime, not the generic
+# paragraph chunker), so it is intentionally absent here.
 VERTICALS_TO_SEED = [
     {"vertical": "dummy", "source_type": "postmortem"},
-    {"vertical": "post_incident", "source_type": "postmortem"},
 ]
 
 
@@ -66,12 +70,19 @@ def seed_vertical(vertical: str, source_type: str) -> None:
           f"skipped={len(summary['skipped'])}, errors={summary['errors']}")
 
 
+
 def main():
     print("Seeding knowledge base from committed synthetic data...")
     for entry in VERTICALS_TO_SEED:
         print(f"\n{entry['vertical']}:")
         seed_vertical(entry["vertical"], entry["source_type"])
 
+
+    # post_incident uses section_chunker() + incident-linked source_id
+    # (mirrors graph.py's runtime persistence), not the generic
+    # staging-folder path.
+    print("\npost_incident:")
+    seed_post_incident()
 
     # meeting_action_items doesn't fit the generic staging-folder
     # pattern above (its KB content is a byproduct of real LLM

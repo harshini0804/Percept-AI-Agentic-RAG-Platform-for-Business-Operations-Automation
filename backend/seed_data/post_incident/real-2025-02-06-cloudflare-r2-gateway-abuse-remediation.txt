@@ -1,0 +1,35 @@
+# Incident: Abuse Remediation Error Disables R2 Object Storage Gateway
+Date: 2025-02-06
+Service: cloudflare-r2
+Severity: P0
+Root Cause Tag: human-error
+
+## Summary
+During an abuse remediation procedure, a human error inadvertently disabled the entire R2 Gateway service instead of a specific endpoint. Insufficient validation safeguards in the admin tooling allowed the broad action to be applied without confirmation.
+
+## Timeline
+- 14:00 UTC — Abuse remediation action initiated for a specific R2 endpoint
+- 14:01 UTC — Admin tool applies action to entire R2 Gateway service instead
+- 14:05 UTC — R2 object storage API begins returning errors globally
+- 14:10 UTC — Monitoring alerts fire; investigation begins
+- 14:20 UTC — Scope of error identified; R2 Gateway re-enabled
+- 14:30 UTC — R2 service fully restored
+
+## Root Cause
+An operator performing abuse remediation used an internal admin tool to disable a specific customer endpoint on the R2 object storage service. The admin tool's interface did not clearly distinguish between disabling a single endpoint and disabling the entire R2 Gateway service. The operator selected the wrong scope (service-level instead of endpoint-level), and the tool executed the action without requiring additional confirmation for service-wide changes. Insufficient validation safeguards in the admin tooling allowed a single operator action to affect all R2 customers.
+
+## Impact
+- ~30 minutes of R2 object storage unavailability
+- All R2 API operations (read, write, list, delete) failed globally
+- Applications depending on R2 for media storage, backups, and CDN origin experienced failures
+
+## Mitigation
+- Immediate: re-enabled the R2 Gateway service
+- Short-term: added scope confirmation prompts to admin tooling
+- Long-long: redesigned admin tool to require explicit service-wide confirmation; implemented blast-radius limits on remediation actions; added two-person authorization for service-level changes
+
+## Lessons Learned
+1. Admin tools must distinguish clearly between narrow and broad actions.
+2. Service-wide changes should require multi-person authorization.
+3. Abuse remediation tools need blast-radius limits — one action should not affect all customers.
+4. Confirmation prompts for high-impact actions are a basic safety requirement.

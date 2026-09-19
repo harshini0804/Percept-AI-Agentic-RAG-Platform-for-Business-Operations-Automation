@@ -1,0 +1,36 @@
+# Incident: Bad Config Combined with Power Failure Takes Down DB Cluster
+Date: 2022-10-10
+Service: gocardless-api
+Severity: P0
+Root Cause Tag: compound-failure
+
+## Summary
+A combination of a configuration error and an uncommon set of hardware failures led to the outage of a critical database cluster at GoCardless, taking their API and Dashboard offline. The configuration error had created a hidden single point of failure that was only exposed when the hardware failure occurred.
+
+## Timeline
+- 09:00 UTC — Power disruption affects datacenter hosting primary DB node
+- 09:05 UTC — Automatic failover triggers to secondary node
+- 09:06 UTC — Secondary node also fails due to misconfigured replication
+- 09:10 UTC — API and Dashboard go offline
+- 09:30 UTC — Engineering identifies dual failure: power + config error
+- 10:30 UTC — Database manually recovered from backup
+- 11:00 UTC — API and Dashboard restored
+
+## Root Cause
+The database cluster's replication configuration had an error that caused the secondary node to lag significantly behind the primary without raising alerts. When a power disruption took down the primary node, the automatic failover promoted the secondary. However, the secondary was too far behind and contained stale data, causing application errors. The configuration error had been present for weeks but went undetected because the monitoring thresholds for replication lag were set too high.
+
+## Impact
+- ~2 hours of API and Dashboard downtime
+- Payment processing temporarily halted
+- Merchants unable to view or manage their GoCardless integrations
+
+## Mitigation
+- Immediate: manually recovered database from recent backup; restored service
+- Short-term: fixed replication configuration; tightened lag monitoring thresholds
+- Long-term: added automated replication health validation; implemented multi-region failover
+
+## Lessons Learned
+1. Replication lag monitoring thresholds must be aggressive enough to catch silent drift.
+2. Automatic failover assumes the secondary is healthy — validate this assumption continuously.
+3. Compound failures (hardware + config) expose hidden single points of failure.
+4. Financial services infrastructure requires multi-region redundancy, not just multi-node.

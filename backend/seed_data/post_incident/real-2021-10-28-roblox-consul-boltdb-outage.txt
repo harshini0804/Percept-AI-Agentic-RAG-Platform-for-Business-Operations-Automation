@@ -1,0 +1,36 @@
+# Incident: Consul Streaming and BoltDB Contention — 73-Hour Platform Outage
+Date: 2021-10-28
+Service: roblox-platform
+Severity: P0
+Root Cause Tag: cascading-failure
+
+## Summary
+Roblox experienced a 73-hour outage affecting all 50+ million daily active users. The root cause was a combination of a Consul service-mesh performance issue triggered by excessive streaming connections and an underlying BoltDB contention problem. The failure cascaded through Roblox's entire microservices architecture, and the complexity of the interdependent systems made diagnosis and recovery extremely difficult.
+
+## Timeline
+- Oct 28 16:00 UTC — Users report inability to join games; error rates spike
+- Oct 28 17:00 UTC — Engineering identifies Consul cluster instability
+- Oct 28 20:00 UTC — Consul nodes experiencing extreme latency; service discovery failing
+- Oct 29 — Multiple recovery attempts fail; BoltDB write contention identified as contributing factor
+- Oct 30 — Consul cluster rebuilt with modified configuration; services slowly recovering
+- Oct 31 05:00 UTC — Full platform restoration confirmed (73 hours total)
+
+## Root Cause
+A recently enabled Consul streaming feature generated an unexpectedly high number of long-lived connections to the Consul cluster. This load exposed a performance bottleneck in BoltDB (Consul's storage backend), where write operations experienced severe contention under the connection volume. The Consul cluster became unable to perform health checks and service discovery reliably. Because nearly every Roblox microservice depends on Consul for service discovery, the Consul failure cascaded into a complete platform outage. Recovery was complicated by the circular dependency: many tools needed to diagnose and fix Consul themselves depended on Consul for service discovery.
+
+## Impact
+- 73 hours of complete platform unavailability
+- 50+ million daily active users unable to access Roblox
+- Estimated revenue impact in the tens of millions of dollars
+- Developer and creator ecosystem also affected (no Roblox Studio uploads)
+
+## Mitigation
+- Immediate: rebuilt Consul cluster from scratch with streaming disabled
+- Short-term: reduced connection counts per service; tuned BoltDB parameters
+- Long-term: implemented Consul cluster monitoring with capacity-based alerting; broke circular dependencies in operational tooling; added out-of-band service discovery fallback
+
+## Lessons Learned
+1. New features (Consul streaming) must be load-tested at production scale before enabling.
+2. Circular dependencies (tooling depends on the system it's meant to fix) dramatically extend MTTR.
+3. Service mesh infrastructure is a single point of failure — it needs independent monitoring and fallback paths.
+4. 73 hours of outage demonstrates that complex distributed systems can have recovery times measured in days, not minutes.

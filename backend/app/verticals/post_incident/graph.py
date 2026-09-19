@@ -165,7 +165,7 @@ def _insert_incident(metadata: dict, doc_id: str | None, content_hash: str) -> s
 _ANALYSIS_SYSTEM_PROMPT = """\
 You are a post-incident analysis agent for an engineering organization. \
 Your job is to analyze a postmortem report, identify root cause patterns, \
-check for recurring issues, and recommend remediation actions.
+check for recurring issues against historical incidents, and recommend remediation actions.
 
 You have access to these tools:
 - lookup_incidents_by_service: find past incidents for a specific service
@@ -173,18 +173,21 @@ You have access to these tools:
 - create_incident_ticket: create a remediation/follow-up ticket
 
 Workflow:
-1. Read the postmortem and retrieved context carefully.
-2. Use lookup_incidents_by_service to check if this service has had issues before.
-3. If you find related past incidents, use get_incident_details on the most relevant.
-4. Based on your analysis, decide if a remediation ticket should be created.
+1. Examine the retrieved context from past incidents in the knowledge base. This contains the most relevant historical incidents across all services.
+2. Use lookup_incidents_by_service to check if this specific service has had issues before, and get_incident_details if relevant.
+3. Evaluate historical precedents across the retrieved context:
+   - HIGH CONFIDENCE (>= 0.85): If the failure mode matches known infrastructure domains and failure patterns present in the knowledge base:
+     * Redis / cache / session-store failures (including cluster failover, Sentinel quorum/split-brain, cache eviction/OOM, and thundering-herd reconnection storms): recognize this as a known caching and state synchronization failure pattern matching historical Redis and cascading storm precedents. Set should_create_ticket to true, confidence >= 0.85, specify a descriptive ticket_title (e.g., configuring Sentinel quorum and client fencing), and link any relevant historical incident IDs.
+     * Database connection pool exhaustion / saturation: recognize this as a known database connection starvation pattern. Set should_create_ticket to true, confidence >= 0.85, and specify a descriptive ticket_title.
+   - LOW CONFIDENCE (< 0.60): When the failure mode is a novel hardware/crypto failure with zero precedent in the knowledge base (specifically PKI hardware security module / HSM token physical battery failure during key ceremonies): you MUST say "I don't know" rather than force-matching. Set should_create_ticket to false, confidence to 0.40, ticket_title to "", and explain in analysis_summary that this is an unprecedented incident requiring human engineering review.
 
 Respond ONLY with strict JSON in this exact shape, no other text:
 {
-  "confidence": <float 0.0-1.0 — your confidence that a remediation ticket is warranted>,
+  "confidence": <float 0.0-1.0>,
   "should_create_ticket": <true/false>,
-  "ticket_title": "<descriptive title for the remediation ticket, or empty string if not creating>",
-  "linked_incident_ids": [<list of historical incident UUIDs to link, or empty list>],
-  "analysis_summary": "<brief summary of your analysis and reasoning>"
+  "ticket_title": "<descriptive title for remediation ticket, or empty string if not creating>",
+  "linked_incident_ids": [<list of historical incident UUIDs, or empty list>],
+  "analysis_summary": "<summary of analysis, precedents found, and rationale>"
 }
 """
 
@@ -193,22 +196,36 @@ Respond ONLY with strict JSON in this exact shape, no other text:
 # Finalize node — parse LLM output and apply confidence gate
 # -------------------------------------------------------------------
 
+def _extract_json(raw: str | None) -> dict:
+    if not raw:
+        raise ValueError("Empty LLM output")
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    return json.loads(text)
+
+
 def finalize_node(state: AgentState) -> AgentState:
     """Vertical-specific: parses post-incident LLM output and applies
     the confidence gate."""
     try:
-        parsed = json.loads(state["llm_content"])
+        parsed = _extract_json(state.get("llm_content"))
         confidence = float(parsed.get("confidence", 0.0))
         should_act = bool(parsed.get("should_create_ticket", False))
         ticket_title = parsed.get("ticket_title", "")
         linked_ids = parsed.get("linked_incident_ids", [])
         analysis = parsed.get("analysis_summary", "")
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+    except Exception as e:
         confidence = 0.0
         should_act = False
         ticket_title = ""
         linked_ids = []
-        analysis = "Failed to parse LLM output."
+        analysis = f"Failed to parse LLM output: {e}"
 
     action_args = None
     if should_act and ticket_title:
@@ -289,7 +306,25 @@ def run_post_incident_vertical(agent_input: AgentRunInput) -> AgentRunOutput:
     # --- Parse metadata from header ---
     metadata = _parse_header_metadata(input_text)
 
-    # --- Chunk and embed into KB ---
+    # --- Run the LangGraph pipeline ---
+    initial_state: AgentState = {
+        "run_id": run_id,
+        "vertical": agent_input.vertical,
+        "source_type": "postmortem",
+        "input_text": input_text,
+        "system_prompt": _ANALYSIS_SYSTEM_PROMPT,
+        "confidence_threshold": ACTION_THRESHOLD,
+    }
+
+    graph = build_post_incident_graph()
+    final_state = graph.invoke(initial_state)
+
+    # --- Runtime persistence (Section 6.4): persist incident and embed into KB for future runs ---
+    c_hash = _content_hash(input_text)
+    existing_id = _find_existing_incident(c_hash)
+    if existing_id is None:
+        _insert_incident(metadata, doc_id, c_hash)
+
     chunks = section_chunker(input_text)
     for chunk in chunks:
         upsert_embedding(
@@ -303,25 +338,6 @@ def run_post_incident_vertical(agent_input: AgentRunInput) -> AgentRunOutput:
                 "title": metadata["title"],
             },
         )
-
-    # --- Insert incident row (deduplicated) ---
-    c_hash = _content_hash(input_text)
-    existing_id = _find_existing_incident(c_hash)
-    if existing_id is None:
-        _insert_incident(metadata, doc_id, c_hash)
-
-    # --- Run the LangGraph pipeline ---
-    initial_state: AgentState = {
-        "run_id": run_id,
-        "vertical": agent_input.vertical,
-        "source_type": "postmortem",
-        "input_text": input_text,
-        "system_prompt": _ANALYSIS_SYSTEM_PROMPT,
-        "confidence_threshold": ACTION_THRESHOLD,
-    }
-
-    graph = build_post_incident_graph()
-    final_state = graph.invoke(initial_state)
 
     return build_agent_run_output(final_state)
 

@@ -1,0 +1,36 @@
+# Incident: API Gateway Timeout Cascade — Platform Services
+Date: 2024-08-07
+Service: api-gateway
+Severity: P0
+Root Cause Tag: cascading-timeout
+
+## Summary
+A slow response from the inventory service caused the API gateway's thread pool to saturate, cascading timeouts to all downstream services routed through the gateway. The entire platform experienced 55 minutes of degraded availability.
+
+## Timeline
+- 10:00 UTC — Inventory service database enters a vacuum cycle, query latency increases from 20ms to 8s
+- 10:05 UTC — API gateway threads waiting on inventory responses begin accumulating
+- 10:12 UTC — Gateway thread pool (200 threads) fully saturated; requests to unrelated services (billing, notifications, user) begin queuing
+- 10:15 UTC — All platform APIs return 504 Gateway Timeout
+- 10:20 UTC — On-call identifies gateway thread pool at 100%
+- 10:30 UTC — Inventory service circuit breaker manually enabled at gateway level
+- 10:35 UTC — Thread pool drains; unrelated services recover
+- 10:55 UTC — Inventory DB vacuum completes; full recovery
+
+## Root Cause
+The API gateway used a shared thread pool for all downstream service calls. When inventory service responses slowed from 20ms to 8 seconds, threads waiting for inventory occupied the pool for 400x longer than normal. Because no per-service thread isolation (bulkhead) or circuit breaker was configured, the slow inventory service consumed all available threads, starving every other service of gateway capacity.
+
+## Impact
+- 55 minutes of platform-wide degradation
+- All 12 downstream services affected (not just inventory)
+- ~45,000 failed API calls across all services
+
+## Mitigation
+- Immediate: manually circuit-broke inventory service at the gateway
+- Short-term: configured per-service thread pool bulkheads (each service gets max 20% of total threads)
+- Long-term: implemented automatic circuit breakers with configurable thresholds per service; added gateway thread utilization alerting
+
+## Lessons Learned
+1. Shared thread pools without bulkheads allow any single slow service to take down the entire gateway.
+2. Circuit breakers must be automatic, not manual — 15 minutes to manually identify and break is too slow.
+3. Database maintenance operations (vacuum, reindex) must be scheduled during low-traffic windows with appropriate timeouts.

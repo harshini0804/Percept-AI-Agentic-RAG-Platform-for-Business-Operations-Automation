@@ -1,0 +1,37 @@
+# Incident: DNS Record Failure During Infrastructure Deployment
+Date: 2023-01-25
+Service: crates-io
+Severity: P1
+Root Cause Tag: dns-error
+
+## Summary
+During deployment of infrastructure changes to crates.io, the DNS record for static.crates.io failed to resolve for an estimated 10-15 minutes. Both certificates and DNS records were recreated during the deployment, and the new DNS records did not propagate before the old certificates were invalidated.
+
+## Timeline
+- 09:15 UTC — Infrastructure changes deployed to crates.io production
+- 09:16 UTC — DNS records for static.crates.io recreated
+- 09:17 UTC — Old DNS records deleted; new records not yet propagated
+- 09:18 UTC — Crate downloads begin failing for users whose DNS resolvers still have old records
+- 09:25 UTC — Reports of download failures begin appearing
+- 09:30 UTC — DNS propagation complete for most resolvers
+- 09:35 UTC — Service fully restored
+
+## Root Cause
+An infrastructure deployment to crates.io involved recreating both SSL certificates and DNS records. The deployment process deleted the old DNS records and created new ones in sequence. DNS propagation takes time (typically seconds to minutes depending on TTL), but the deployment did not wait for propagation to complete before the old records became invalid. During the propagation window, DNS queries for static.crates.io returned NXDOMAIN or stale records, causing crate downloads to fail.
+
+## Impact
+- 10-15 minutes of crate download failures
+- Approximately 4.71K requests per second affected
+- CI/CD pipelines depending on crate downloads failed
+- Rust ecosystem build processes disrupted
+
+## Mitigation
+- Immediate: waited for DNS propagation; service self-recovered
+- Short-term: added DNS propagation verification to deployment process
+- Long-term: implemented blue-green DNS strategy with overlap period; added pre-deployment DNS health checks
+
+## Lessons Learned
+1. DNS record changes during deployment must account for propagation delay.
+2. Old DNS records should be maintained in parallel until new records are confirmed propagated.
+3. Critical infrastructure deployments should use blue-green strategy for DNS changes.
+4. Package registry availability directly impacts the entire language ecosystem's CI/CD.

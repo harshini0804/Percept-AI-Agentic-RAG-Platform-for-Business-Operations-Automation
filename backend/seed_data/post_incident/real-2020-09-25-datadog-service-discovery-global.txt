@@ -1,0 +1,37 @@
+# Incident: Bad Service Discovery Client Config Causes Global Outage
+Date: 2020-09-25
+Service: datadog-infrastructure
+Severity: P0
+Root Cause Tag: config-error
+
+## Summary
+A bad service discovery configuration in one of Datadog's clients brought down service discovery globally when the dependent client went down. The misconfigured client caused a cascade that overwhelmed the service discovery cluster, affecting Datadog's ability to process and display monitoring data.
+
+## Timeline
+- 14:00 UTC — Client service begins experiencing issues
+- 14:05 UTC — Misconfigured service discovery client generates excessive queries
+- 14:15 UTC — Service discovery cluster overwhelmed; begins rejecting requests
+- 14:30 UTC — Global service discovery failure; all microservices affected
+- 15:00 UTC — Root cause identified; misconfigured client isolated
+- 15:30 UTC — Service discovery cluster stabilized
+- 16:00 UTC — Full platform recovery
+
+## Root Cause
+A service discovery client was configured with aggressive retry behavior and no backoff. When the client's upstream dependency failed, the client entered a tight retry loop against the service discovery cluster. The volume of retry requests overwhelmed the service discovery cluster, which then failed to serve requests from all other clients. This created a cascading failure where the initial single-client issue propagated to a global service discovery outage, affecting all Datadog services.
+
+## Impact
+- ~2 hours of degraded or unavailable Datadog monitoring
+- Customers unable to view dashboards, alerts, or metrics
+- Monitoring blind spot during the outage — customers couldn't monitor their own systems
+- Ironic impact: monitoring service was itself unmonitorable
+
+## Mitigation
+- Immediate: isolated the misconfigured client; restarted service discovery cluster
+- Short-term: added rate limiting on service discovery query endpoints
+- Long-term: enforced exponential backoff on all service discovery clients; added circuit breakers; implemented query rate limiting per client
+
+## Lessons Learned
+1. Service discovery clients must implement exponential backoff — aggressive retries can cause cascading failures.
+2. Service discovery clusters need per-client rate limiting to prevent single-client storms.
+3. The monitoring system itself needs out-of-band monitoring (avoid circular dependencies).
+4. Client-side circuit breakers are essential for protecting shared infrastructure.

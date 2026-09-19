@@ -1,0 +1,36 @@
+# Incident: Customer Data Accidentally Deleted — 14-Day Multi-Tenant Outage
+Date: 2022-04-05
+Service: atlassian-cloud
+Severity: P0
+Root Cause Tag: human-error
+
+## Summary
+A maintenance script intended to deactivate a small number of standalone legacy Atlassian apps instead deactivated entire cloud tenant sites for 775 customers. The script used the wrong API endpoint — one that marks entire sites for deletion rather than individual apps. Affected customers lost access to Jira, Confluence, Trello, and Opsgenie for up to 14 days while Atlassian restored each tenant from backups.
+
+## Timeline
+- 07:38 UTC Apr 5 — Maintenance script executes, deactivating 775 customer sites
+- 08:00 UTC — First customer reports loss of access to Jira and Confluence
+- 09:30 UTC — Atlassian confirms the scope: 775 tenants marked for deletion
+- 12:00 UTC — Restoration from backups begins; estimated days of work
+- Apr 8 — First batch of customers restored
+- Apr 18 — All 775 customer sites fully restored (14 days total)
+
+## Root Cause
+An internal decommissioning script was built to disable standalone legacy apps for a set of customer sites. The script called a destructive API endpoint that marks entire cloud sites for deletion rather than the intended endpoint that only disables specific apps. The script was not tested against a staging environment with real tenant structures, and there was no dry-run mode or confirmation prompt before executing destructive operations. The API itself did not have guardrails to prevent bulk site deletion.
+
+## Impact
+- 775 customers lost access to all Atlassian Cloud products for up to 14 days
+- Complete loss of Jira project management, Confluence documentation, and Opsgenie alerting
+- Businesses dependent on Atlassian for daily operations were severely disrupted
+- Significant reputational damage and customer trust erosion
+
+## Mitigation
+- Immediate: halted the script; began manual restoration from backups
+- Short-term: restored customers in batches over 14 days using backup snapshots
+- Long-term: added dry-run mode to all maintenance scripts; implemented soft-delete with recovery window; added guardrails on bulk-destructive API endpoints
+
+## Lessons Learned
+1. Destructive operations must have dry-run modes, confirmation prompts, and blast-radius limits.
+2. Scripts that interact with multi-tenant infrastructure need staging validation with real tenant structures.
+3. Bulk deletion APIs should require explicit multi-step confirmation and rate limiting.
+4. Backup restoration at scale is slow — design for prevention, not just recovery.

@@ -1,0 +1,38 @@
+# Incident: Two Misconfigurations Plus Software Bug Cause Network Failure
+Date: 2019-06-02
+Service: google-cloud-networking
+Severity: P0
+Root Cause Tag: cascading-config-failure
+
+## Summary
+Two separate misconfigurations combined with a latent software bug caused a massive Google Cloud Network failure on the US East Coast. The incident affected Google Cloud, YouTube, Gmail, Google Search, and numerous other Google services for several hours.
+
+## Timeline
+- 11:45 PDT — Maintenance activity triggers first misconfiguration
+- 11:50 PDT — Network congestion begins building in US East
+- 12:00 PDT — User-facing service degradation reported
+- 12:25 PDT — Google engineering identifies network capacity issue
+- 14:00 PDT — Root cause isolated to dual misconfigurations
+- 16:00 PDT — Network capacity fully restored
+- 16:30 PDT — All services operating normally
+
+## Root Cause
+A network maintenance event combined two independent misconfigurations: (1) an incorrect capacity configuration that underestimated required bandwidth headroom, and (2) a traffic engineering configuration that concentrated traffic onto a smaller number of network paths than intended. A latent software bug in the network management system prevented the automated safeguards from detecting the combined effect of these two misconfigurations before they were applied. The result was severe congestion on US East Coast network links that carried both Google Cloud customer traffic and Google's own services.
+
+## Impact
+- ~4 hours of degraded network performance across US East
+- Google Cloud Compute Engine, Cloud Storage, and BigQuery affected
+- YouTube video loading speeds significantly degraded
+- Gmail delivery delays for millions of users
+- Multiple Google services experienced elevated error rates
+
+## Mitigation
+- Immediate: manually redistributed traffic across available network paths
+- Short-term: corrected both configurations and increased capacity headroom
+- Long-term: fixed the software bug in the safeguard system; added cross-validation between capacity and traffic engineering configurations
+
+## Lessons Learned
+1. Configuration changes that individually appear safe can interact to create dangerous compound failures.
+2. Automated safeguard systems must validate the combined effect of concurrent configuration changes.
+3. Network capacity headroom must account for worst-case traffic distribution, not just average load.
+4. US East concentration risk — diversifying traffic paths reduces blast radius.

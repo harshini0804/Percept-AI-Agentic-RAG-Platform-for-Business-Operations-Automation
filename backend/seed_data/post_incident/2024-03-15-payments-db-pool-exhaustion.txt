@@ -2,6 +2,7 @@
 Date: 2024-03-15
 Service: payments-service
 Severity: P1
+Root Cause Tag: db-pool-exhaustion
 
 ## Summary
 The payments-service experienced a complete outage lasting 47 minutes due to exhaustion of the PostgreSQL connection pool. All transaction processing halted, affecting approximately 12,000 customers during peak hours.

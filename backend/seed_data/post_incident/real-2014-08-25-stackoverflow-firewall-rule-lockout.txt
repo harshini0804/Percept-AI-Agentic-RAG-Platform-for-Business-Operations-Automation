@@ -1,0 +1,35 @@
+# Incident: Firewall Configuration Blocks All Traffic
+Date: 2014-08-25
+Service: stackoverflow-network
+Severity: P0
+Root Cause Tag: firewall-config-error
+
+## Summary
+A bad firewall configuration change blocked all traffic to Stack Exchange and Stack Overflow, causing a complete outage. The misconfigured rule denied all incoming connections instead of targeting the intended IP range.
+
+## Timeline
+- 11:00 UTC — Firewall rule change deployed as part of security hardening
+- 11:02 UTC — All Stack Exchange sites become unreachable
+- 11:05 UTC — Internal monitoring confirms total connectivity loss
+- 11:15 UTC — Firewall rule identified as cause; rollback initiated
+- 11:25 UTC — Firewall rule reverted; services begin recovering
+- 11:35 UTC — Full service restoration
+
+## Root Cause
+During a routine security hardening exercise, a firewall rule was deployed that used an overly broad CIDR block in a deny rule. The rule was intended to block a specific range of malicious IPs but instead matched all incoming traffic. The firewall management tool did not preview the effective rule set or warn about rules that would deny all traffic. The change was deployed directly to production without a staging test.
+
+## Impact
+- ~35 minutes of total outage for all Stack Exchange network sites
+- Stack Overflow, Server Fault, Super User, and all Stack Exchange communities unavailable
+- Millions of developers unable to access Q&A content during the outage
+
+## Mitigation
+- Immediate: reverted the firewall rule change
+- Short-term: added rule preview and impact analysis to firewall management workflow
+- Long-term: implemented automated firewall rule validation that flags rules matching more than a threshold percentage of traffic
+
+## Lessons Learned
+1. Firewall rule changes should preview the effective deny surface before deployment.
+2. Broad deny rules (matching large CIDR blocks) should require explicit approval.
+3. Firewall management tools should have built-in safeguards against rules that deny all traffic.
+4. Even security-motivated changes need staged rollout and validation.

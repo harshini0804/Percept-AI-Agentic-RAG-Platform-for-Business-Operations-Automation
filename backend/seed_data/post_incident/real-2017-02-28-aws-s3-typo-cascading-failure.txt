@@ -1,0 +1,38 @@
+# Incident: S3 Server Removal Typo — US-EAST-1 Cascading Failure
+Date: 2017-02-28
+Service: aws-s3
+Severity: P0
+Root Cause Tag: human-error
+
+## Summary
+A human error during routine debugging of the Amazon S3 billing system caused a large number of servers to be inadvertently removed from service in the US-EAST-1 region. The typo in a maintenance command removed far more servers than intended, taking down critical S3 subsystems and causing a cascading failure that affected hundreds of companies and AWS services that depend on S3, including EC2 and EBS.
+
+## Timeline
+- 09:37 PST — Engineer executes a command to remove a small number of S3 servers as part of billing system debugging
+- 09:37 PST — Typo causes a larger set of servers to be removed than intended
+- 09:40 PST — S3 subsystems begin failing; index and placement services lose quorum
+- 10:00 PST — S3 API returns elevated error rates; dependent AWS services begin failing
+- 10:30 PST — EC2 API degraded; EBS volume operations failing; Lambda functions timing out
+- 11:00 PST — Full S3 subsystem restart initiated (requires rebuilding index state)
+- 13:54 PST — S3 fully restored after complete subsystem restart
+
+## Root Cause
+An authorized engineer was using an established playbook to debug the S3 billing system. One of the commands was intended to remove a small number of servers from the S3 index subsystem. A typo in the command caused a much larger set of servers to be removed. These servers supported critical S3 subsystems (the index subsystem that maps objects to storage and the placement subsystem that allocates new storage). Both subsystems required a full restart, which took hours because they needed to process large amounts of metadata to rebuild their internal state.
+
+## Impact
+- ~4.5 hours of S3 outage in US-EAST-1 (09:37 PST–13:54 PST)
+- Cascading failures across EC2, EBS, Lambda, and dozens of other AWS services dependent on S3
+- Hundreds of companies affected: Slack, Trello, IFTTT, Imgur, and many more
+- Estimated billions of dollars in aggregate economic impact
+- Highlighted the internet's dependence on a single cloud provider's single region
+
+## Mitigation
+- Immediate: initiated full restart of S3 index and placement subsystems
+- Short-term: validated all subsystem state after restart
+- Long-term: reduced the blast radius of server removal commands; added rate limiting on how quickly capacity could be removed; improved tooling to require confirmation for large-scale operations
+
+## Lessons Learned
+1. Dangerous operations (server removal) must have confirmation prompts and blast-radius limits — "did you mean to remove N servers?" checks.
+2. Subsystem restart times must be factored into availability planning — if a restart takes hours, the MTTR is hours.
+3. A single typo in a privileged command should never be able to cause a region-wide outage.
+4. Dependent services (EC2, Lambda) should gracefully degrade when S3 is unavailable, not fail completely.

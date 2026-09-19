@@ -1,0 +1,36 @@
+# Incident: Certificate Expiry Disables All Firefox Add-Ons
+Date: 2019-05-04
+Service: firefox-addons
+Severity: P0
+Root Cause Tag: certificate-expiry
+
+## Summary
+Most Firefox add-ons (~15,000) stopped working when an intermediate signing certificate expired. Firefox requires a valid certificate chain to verify add-on integrity and prevent malware. The expired certificate caused all add-ons to fail verification and be disabled, affecting hundreds of millions of Firefox users for 15-21 hours.
+
+## Timeline
+- May 3 23:00 UTC — Intermediate certificate expires
+- May 4 01:00 UTC — Reports of add-ons being disabled begin appearing
+- May 4 06:00 UTC — Mozilla confirms certificate expiry as root cause
+- May 4 09:00 UTC — Mozilla pushes Studies hotfix to inject valid certificate
+- May 4 14:00 UTC — Hotfix reaching majority of users via Studies system
+- May 4 18:00 UTC — Follow-up Firefox update released for remaining users
+
+## Root Cause
+Mozilla's add-on signing infrastructure uses a certificate chain to verify that add-ons have been reviewed and approved. An intermediate certificate in this chain had a fixed expiration date that was not monitored by any automated alerting system. When it expired, Firefox's runtime signature verification failed for every installed add-on, causing the browser to disable them all as a security precaution. The certificate rotation process was manual and had no calendar reminders or automated renewal.
+
+## Impact
+- ~15,000 add-ons disabled across hundreds of millions of Firefox installations
+- Ad blockers, password managers, privacy tools, and productivity extensions all stopped working
+- 15-21 hours before the fix reached most users
+- Some users lost add-on data and customizations during the re-enable process
+
+## Mitigation
+- Immediate: pushed a privileged "Studies" add-on that injected a valid certificate into Firefox's cert store
+- Short-term: released Firefox updates with the renewed certificate
+- Long-term: implemented automated certificate expiry monitoring and alerting; reduced certificate lifetimes with automated renewal
+
+## Lessons Learned
+1. Certificate expiry is a predictable failure — automate monitoring and alerting for all certificates.
+2. Hard-coded certificate expiration dates without monitoring are ticking time bombs.
+3. The blast radius of a signing certificate is every artifact it signs — potentially the entire add-on ecosystem.
+4. Recovery mechanisms (like Firefox's Studies system) must exist for pushing emergency fixes.

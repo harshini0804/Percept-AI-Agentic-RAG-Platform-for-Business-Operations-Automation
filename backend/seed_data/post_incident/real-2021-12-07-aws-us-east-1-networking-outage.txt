@@ -1,0 +1,40 @@
+# Incident: Internal Network Congestion Causes Multi-Service Cascade
+Date: 2021-12-07
+Service: aws-us-east-1
+Severity: P0
+Root Cause Tag: network-congestion
+
+## Summary
+AWS experienced a major outage in the US-EAST-1 region when an automated scaling activity triggered unexpected behavior in the internal network, causing congestion on devices that connect the internal AWS network to the main AWS network. The congestion cascaded to affect numerous AWS services and customer workloads.
+
+## Timeline
+- 07:30 PST — Automated scaling activity triggers increased internal network traffic
+- 07:35 PST — Internal network devices begin experiencing congestion
+- 07:45 PST — AWS Console, CloudWatch begin experiencing issues
+- 08:00 PST — EC2 API calls failing; Lambda invocations delayed
+- 09:00 PST — Engineering identifies network congestion root cause
+- 11:00 PST — Traffic engineering mitigations applied
+- 13:00 PST — Major services recovering
+- 16:00 PST — Full restoration across all services
+
+## Root Cause
+An automated activity to scale capacity in the internal services hosting the AWS management console triggered a large burst of internal network traffic. This traffic congested the networking devices that connect the internal AWS management network to the main production AWS network. The congestion caused packet loss and latency spikes that affected both AWS management plane services (Console, CloudWatch, API endpoints) and, through shared networking paths, some customer data plane services. The networking devices did not have adequate traffic shaping to prevent internal scaling activities from affecting production traffic.
+
+## Impact
+- ~8 hours of degraded AWS services in US-EAST-1
+- AWS Console intermittently unavailable
+- CloudWatch metrics and alarms delayed
+- Lambda function invocations delayed or failing
+- DynamoDB, SQS, and other services experienced elevated latency
+- Many customer workloads affected
+
+## Mitigation
+- Immediate: applied traffic engineering to separate internal scaling traffic from production
+- Short-term: increased capacity on congested networking devices
+- Long-term: redesigned network topology to isolate internal scaling traffic from production paths; added traffic shaping and quality-of-service guarantees
+
+## Lessons Learned
+1. Internal scaling activities must not share network paths with production customer traffic.
+2. Network device congestion from internal operations can cascade to customer-facing services.
+3. Traffic isolation between management plane and data plane is critical for cloud providers.
+4. US-EAST-1 concentration risk — major outages in this region affect a disproportionate number of customers.

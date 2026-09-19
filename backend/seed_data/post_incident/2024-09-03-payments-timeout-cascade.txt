@@ -2,6 +2,7 @@
 Date: 2024-09-03
 Service: payments-service
 Severity: P1
+Root Cause Tag: cascading-timeout
 
 ## Summary
 A cascading timeout failure in the payments processing pipeline caused a 52-minute outage affecting all payment transactions. The incident originated from a third-party fraud detection API that became slow, which exhausted the payments-service thread pool and cascaded into the order service.

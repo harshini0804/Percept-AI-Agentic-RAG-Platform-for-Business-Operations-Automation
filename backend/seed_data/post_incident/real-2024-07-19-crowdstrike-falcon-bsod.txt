@@ -1,0 +1,38 @@
+# Incident: Falcon Content Update — Global Windows BSOD
+Date: 2024-07-19
+Service: crowdstrike-falcon
+Severity: P0
+Root Cause Tag: bad-deployment
+
+## Summary
+A content update for CrowdStrike's Falcon endpoint detection agent caused an out-of-bounds memory read that triggered a Windows kernel crash (Blue Screen of Death) on approximately 8.5 million Windows machines worldwide. The update was deployed globally without staged rollout and the defect was not caught by the Content Validator due to a bug in validation logic. Airlines, hospitals, banks, and government agencies experienced simultaneous outages.
+
+## Timeline
+- 04:09 UTC — Content update deployed to Falcon Channel File 291
+- 04:15 UTC — First reports of Windows BSOD across multiple organizations
+- 04:30 UTC — CrowdStrike monitoring detects anomalous crash volume
+- 05:27 UTC — CrowdStrike reverts the content update (78 minutes after deployment)
+- 05:30 UTC — New machines stop crashing, but already-affected machines are stuck in boot loops
+- 06:00+ UTC — Organizations begin manual remediation: boot to Safe Mode, delete the channel file
+- 24:00+ UTC — Large organizations still remediating; some take days to fully recover
+
+## Root Cause
+The Falcon sensor content update contained new detection logic data that referenced memory beyond the bounds of the input data buffer. The Content Validator, which is supposed to catch such errors before deployment, had a bug that failed to detect the out-of-bounds reference. Because Falcon's sensor runs as a kernel-level driver on Windows, the invalid memory access triggered an unrecoverable kernel exception (BSOD). The update was deployed simultaneously to all Falcon agents worldwide without a phased rollout, meaning the defect affected the entire install base within minutes.
+
+## Impact
+- ~8.5 million Windows machines crashed with BSOD
+- Airlines grounded flights (Delta, United, American); hospitals reverted to paper; banks shut branches
+- Estimated $5.4 billion in direct losses to Fortune 500 companies
+- Manual remediation required physical access to each machine (Safe Mode + file deletion)
+- Some organizations took 1-2 weeks to fully recover large fleets
+
+## Mitigation
+- Immediate: CrowdStrike reverted the content update within 78 minutes
+- Short-term: published manual remediation steps (boot to Safe Mode, delete C-00000291*.sys)
+- Long-term: implemented staged content deployments with canary groups; fixed the Content Validator bug; added runtime bounds checking; committed to independent third-party security review of deployment processes
+
+## Lessons Learned
+1. Kernel-level software updates must have staged rollout — never deploy to 100% of endpoints simultaneously.
+2. Content validation tooling is itself a critical system that needs its own testing and validation.
+3. A single bad update to a kernel driver can cause a global-scale outage measured in billions of dollars.
+4. Recovery from kernel crashes requires physical/manual intervention — remote remediation tools don't work when the OS can't boot.

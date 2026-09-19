@@ -1,0 +1,37 @@
+# Incident: Cilium Upgrade Removes All Network Rules — Multi-Region Kubernetes Outage
+Date: 2023-03-08
+Service: datadog-kubernetes
+Severity: P0
+Root Cause Tag: bad-deployment
+
+## Summary
+An automatic upgrade of Cilium (the container networking and security component) across Datadog's Kubernetes clusters removed all network policy rules. This effectively removed all network segmentation and access controls, then caused connectivity failures as the Cilium agents crashed and restarted in a degraded state. The outage affected all Datadog Cilium-protected Kubernetes clusters across all regions and cloud providers simultaneously, lasting approximately 24 hours.
+
+## Timeline
+- 02:00 UTC — Automatic Cilium upgrade triggers across all Kubernetes clusters
+- 02:15 UTC — Cilium agents apply the upgrade; all existing network policy rules are dropped
+- 02:30 UTC — Pod-to-pod communication begins failing across clusters
+- 03:00 UTC — Multiple Datadog services experience connectivity failures
+- 04:00 UTC — Root cause identified as Cilium upgrade removing network rules
+- 12:00 UTC — Manual re-application of network policies begins
+- ~26:00 UTC — Full recovery across all regions (24 hours total)
+
+## Root Cause
+The automatic Cilium upgrade process had a bug that caused it to treat the upgrade as a fresh installation rather than an in-place upgrade. During a fresh installation, Cilium starts with no network policy rules. The upgrade replaced all existing network policy state with an empty ruleset, effectively removing all pod-to-pod network segmentation. Because the upgrade was configured to roll out automatically across all clusters simultaneously (rather than through a staged canary process), every Kubernetes cluster in every region was affected at the same time.
+
+## Impact
+- ~24 hours of degraded to unavailable service across all Datadog Kubernetes clusters
+- All regions and cloud providers affected simultaneously (no geographic isolation)
+- Network policies removed, causing both connectivity failures and security posture degradation
+- Customer-facing monitoring, alerting, and dashboards all affected
+
+## Mitigation
+- Immediate: identified the Cilium upgrade as root cause; began manual policy re-application
+- Short-term: rolled back Cilium to the previous version; manually restored all network policies
+- Long-term: disabled automatic Cilium upgrades; implemented staged canary rollout for infrastructure components; added network policy drift detection alerting
+
+## Lessons Learned
+1. Infrastructure components (CNI plugins, service meshes) must never upgrade automatically across all clusters simultaneously.
+2. Network policy state must be treated as critical configuration — upgrades that reset it are catastrophic.
+3. Canary deployment is non-negotiable for any component that controls network connectivity.
+4. Network policy drift detection should run continuously — any unexpected removal should trigger an immediate alert.

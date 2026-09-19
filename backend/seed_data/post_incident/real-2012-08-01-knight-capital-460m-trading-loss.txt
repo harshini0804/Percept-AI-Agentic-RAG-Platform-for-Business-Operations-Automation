@@ -1,0 +1,37 @@
+# Incident: Conflicting Deployed Versions — $460 Million Trading Loss in 45 Minutes
+Date: 2012-08-01
+Service: knight-capital-smars
+Severity: P0
+Root Cause Tag: bad-deployment
+
+## Summary
+Knight Capital Group lost $460 million in 45 minutes due to a software deployment error in their SMARS (Smart Market Access Routing System) trading platform. An old, deprecated feature flag was reused for new functionality, but the deployment only updated 7 of 8 production servers. The one server still running the old code interpreted the flag as an instruction to execute an old, aggressive market-making algorithm that rapidly accumulated losing positions across 154 stocks.
+
+## Timeline
+- 09:30 EDT — NYSE market opens; SMARS begins processing orders
+- 09:31 EDT — Server 8 (not updated) begins executing the deprecated Power Peg algorithm
+- 09:32 EDT — Anomalous trading volume detected; Knight Capital is buying high and selling low across 154 stocks
+- 09:45 EDT — Engineers identify the issue; begin attempting to stop the rogue server
+- 10:15 EDT — Rogue server shut down (45 minutes of uncontrolled trading)
+- End of day — Knight Capital has accumulated $460M in net losses from the unwanted positions
+
+## Root Cause
+Knight Capital reused a feature flag (a bit in a configuration field) that had previously activated a deprecated trading algorithm called "Power Peg." New functionality was deployed to 7 of 8 SMARS servers, where the flag was interpreted correctly. The 8th server was missed during deployment and still had the old Power Peg code. When the flag was activated to enable the new functionality, server 8 interpreted it as an instruction to run Power Peg — an algorithm that aggressively entered market positions. The algorithm had no position limits, no kill switch, and no monitoring for anomalous trading volume. In 45 minutes, it executed over 4 million trades, accumulating massive losses.
+
+## Impact
+- $460 million in trading losses in 45 minutes
+- Knight Capital's market cap dropped 75% in two days
+- The company was acquired by Getco LLC for a fraction of its prior value
+- SEC investigation and regulatory action followed
+- One of the most expensive software deployment errors in history
+
+## Mitigation
+- Immediate: shut down the rogue server; unwound positions over the following days
+- Short-term: completed the deployment to all 8 servers
+- Long-term: N/A — the company did not survive the financial impact
+
+## Lessons Learned
+1. Never reuse deprecated feature flags — dead code with live activation paths is a ticking bomb.
+2. Deployment must be all-or-nothing with verification — partial deployment to N-1 of N servers is a critical failure mode.
+3. Automated trading systems must have position limits, kill switches, and anomalous volume detection.
+4. The cost of a software bug can exceed the value of the company itself.

@@ -9,6 +9,7 @@ Shared state every node reads/writes. Vertical-specific graphs may
 extend this with extra fields as needed.
 """
 
+import json
 from typing import TypedDict, Optional, Any
 from langgraph.graph import StateGraph, END
 
@@ -112,18 +113,43 @@ def reason_node(state: AgentState) -> AgentState:
 
     response = call_llm(messages=messages, tools=tools)
 
-    tool_calls = response["tool_calls"]
-    if tool_calls:
-        for tc in tool_calls:
+    step_count = 0
+    max_steps = 3
+    all_tool_calls = []
+
+    while response.get("tool_calls") and step_count < max_steps:
+        step_count += 1
+        tcs = response["tool_calls"]
+        all_tool_calls.extend(tcs)
+        for tc in tcs:
             log_decision(state["run_id"], "tool_call", tc)
             result = execute_tool(state["vertical"], tc["name"], tc["arguments"])
-            messages.append({"role": "assistant", "content": None, "tool_calls": [tc]})
-            messages.append({"role": "tool", "content": str(result)})
+            tc_id = tc.get("id") or f"call_{tc['name']}"
+            messages.append({
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": tc_id,
+                        "type": "function",
+                        "function": {
+                            "name": tc["name"],
+                            "arguments": json.dumps(tc["arguments"]),
+                        },
+                    }
+                ],
+            })
+            messages.append({"role": "tool", "tool_call_id": tc_id, "content": str(result)})
 
-        response = call_llm(messages=messages, tools=tools)
+        current_tools = tools if step_count < max_steps else None
+        response = call_llm(messages=messages, tools=current_tools)
+
+    if response.get("content") is None and response.get("tool_calls"):
+        # Force text response if model insists on tool calling after max steps
+        response = call_llm(messages=messages, tools=None)
 
     state["llm_content"] = response["content"]
-    state["tool_calls"] = tool_calls
+    state["tool_calls"] = all_tool_calls
 
     log_decision(state["run_id"], "llm_reasoning", {"content": response["content"]})
     return state

@@ -2,6 +2,7 @@
 Date: 2024-07-10
 Service: cache-cluster
 Severity: P2
+Root Cause Tag: redis-failure
 
 ## Summary
 The shared Redis cache cluster was OOM-killed by the kernel, causing a cache stampede across product-catalog, search, and recommendation services. Latency degraded for 28 minutes while the cluster recovered and caches were repopulated.

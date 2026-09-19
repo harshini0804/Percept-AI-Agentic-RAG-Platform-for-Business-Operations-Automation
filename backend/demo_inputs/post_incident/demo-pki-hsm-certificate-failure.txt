@@ -1,0 +1,37 @@
+# Incident: Certificate Authority Key Ceremony Delay — TLS Issuance Failure
+Date: 2026-08-22
+Service: internal-pki
+Severity: P2
+
+## Summary
+The internal Public Key Infrastructure (PKI) system failed to issue new TLS certificates for 6 hours because the offline root CA's Hardware Security Module (HSM) was unavailable during a scheduled key ceremony. Services with certificates expiring that day experienced TLS handshake failures. The incident was exacerbated by the lack of a certificate expiration monitoring dashboard and the fact that the key ceremony schedule was tracked in a shared spreadsheet rather than an automated calendar.
+
+## Timeline
+- 08:00 UTC — Scheduled key ceremony to sign new intermediate CA certificate
+- 08:15 UTC — HSM operator discovers the HSM's authentication token battery is dead; ceremony cannot proceed
+- 08:30 UTC — Replacement token ordered; estimated 4-hour delivery
+- 10:00 UTC — First TLS handshake failures reported by api-gateway service (certificate expired at 09:55 UTC)
+- 10:15 UTC — Engineering discovers 3 more services with certificates expiring within 24 hours
+- 12:30 UTC — Replacement HSM token arrives; key ceremony completed
+- 13:00 UTC — New intermediate CA certificate signed; pending certificate requests issued
+- 14:15 UTC — All affected services re-issued certificates; TLS errors resolved
+
+## Root Cause
+The internal PKI system uses an air-gapped root CA with an HSM for signing intermediate certificates. The HSM requires a physical authentication token (smart card + PIN) to authorize signing operations. The token's internal battery had silently died, rendering it non-functional. There was no monitoring on the HSM token battery status because the token was stored in a physical safe and only accessed quarterly during key ceremonies. Additionally, the certificate expiration monitoring only checked the root and intermediate CA certificates, not individual service certificates, so the impending expirations were not flagged in advance.
+
+## Impact
+- 6 hours of TLS certificate issuance failure (08:00–14:15 UTC)
+- 4 services experienced TLS handshake failures for 4+ hours
+- Internal API traffic between microservices degraded (mTLS enforcement)
+- No external customer impact (external certificates use a separate public CA)
+
+## Mitigation
+- Immediate: completed key ceremony with replacement token; batch-issued pending certificates
+- Short-term: added battery monitoring check to quarterly key ceremony runbook; created certificate expiration dashboard covering all service certificates (not just CA certs)
+- Long-term: implemented automated certificate renewal via ACME protocol for internal services; reduced dependency on manual key ceremonies by extending intermediate CA validity to 2 years; procured backup HSM tokens
+
+## Lessons Learned
+1. Hardware dependencies (HSM tokens, smart cards) have physical failure modes that software monitoring can't detect — include physical inspection in operational runbooks.
+2. Certificate expiration monitoring must cover ALL certificates in the chain, not just root and intermediate CAs.
+3. Manual key ceremonies are a single point of failure — automate certificate renewal with ACME wherever possible.
+4. Critical operational schedules (key ceremonies) should be in automated calendaring systems with alerts, not spreadsheets.

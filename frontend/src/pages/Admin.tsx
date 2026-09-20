@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { resyncVertical, getSyncHistory, type ResyncResponse } from "../api/admin";
+import { getVerticalLabel } from "../utils/verticals";
 
 // Matches VERTICAL_SOURCE_TYPES in backend/app/api/admin.py — the
 // four verticals with staging-folder-based ingestion (Section 8).
@@ -42,14 +43,14 @@ function Admin() {
               disabled={mutation.isPending}
               className="bg-slate-900 text-white text-sm px-3 py-2 rounded disabled:opacity-50"
             >
-              Resync: {v}
+              Resync: {getVerticalLabel(v)}
             </button>
           ))}
         </div>
 
         {lastResult && (
           <div className="mt-4 text-sm bg-slate-50 rounded p-3">
-            <p className="font-medium mb-1">{lastResult.vertical}</p>
+            <p className="font-medium mb-1">{getVerticalLabel(lastResult.vertical)}</p>
             <p className="text-green-700">Processed: {lastResult.processed.length}</p>
             <p className="text-slate-500">Skipped (unchanged): {lastResult.skipped.length}</p>
             {lastResult.errors.length > 0 && (
@@ -59,7 +60,7 @@ function Admin() {
         )}
 
         {mutation.isError && (
-          <p className="text-red-600 text-sm mt-2">{(mutation.error as Error).message}</p>
+          <p className="text-red-600 text-sm mt-2">Something went wrong triggering resync. ({(mutation.error as Error).message})</p>
         )}
       </div>
 
@@ -80,7 +81,7 @@ function Admin() {
           <tbody>
             {history?.map((h, i) => (
               <tr key={i} className="border-b">
-                <td className="py-2">{h.vertical}</td>
+                <td className="py-2">{getVerticalLabel(h.vertical)}</td>
                 <td className="py-2 font-mono text-xs">{h.file_path}</td>
                 <td className="py-2">{new Date(h.last_synced_at).toLocaleString()}</td>
               </tr>

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getEvaluationMetrics } from "../api/evaluation";
+import { getVerticalLabel } from "../utils/verticals";
 
 function pct(value: number): string {
   return `${(value * 100).toFixed(0)}%`;
@@ -12,8 +13,7 @@ function Evaluation() {
   });
 
   if (isLoading) return <p>Loading metrics...</p>;
-  if (error) return <p className="text-red-600">Error: {(error as Error).message}</p>;
-
+  if (error) return <p className="text-red-600">Something went wrong loading evaluation metrics. ({(error as Error).message})</p>;
   if (!metrics || metrics.length === 0) {
     return (
       <div>
@@ -73,7 +73,7 @@ function Evaluation() {
           <tbody>
             {metrics.map((m) => (
               <tr key={m.vertical} className="border-b">
-                <td className="py-2 pr-4 font-medium">{m.vertical}</td>
+                <td className="py-2 pr-4 font-medium">{getVerticalLabel(m.vertical)}</td>
                 <td className="py-2 pr-4">{m.total_runs}</td>
                 <td className="py-2 pr-4">{pct(m.resolution_rate)}</td>
                 <td className="py-2 pr-4">{pct(m.escalation_rate)}</td>

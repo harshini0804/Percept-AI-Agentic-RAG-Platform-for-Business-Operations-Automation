@@ -120,11 +120,12 @@ function Submit() {
               onChange={handleFileChange}
               className="hidden"
             />
-            <button
+                        <button
               type="button"
               onClick={handleAttachClick}
               disabled={inputText.trim().length > 0}
               title="Attach a file (.txt, .pdf, .docx)"
+              aria-label="Attach a file"
               className="text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full p-2 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
             >
               <Paperclip size={18} />
@@ -134,6 +135,7 @@ function Submit() {
               type="submit"
               disabled={!canSubmit}
               title="Analyze"
+              aria-label="Analyze"
               className="bg-slate-900 text-white rounded-full p-2 disabled:opacity-40 hover:bg-slate-700 transition-colors"
             >
               <ArrowUp size={18} />
@@ -145,7 +147,7 @@ function Submit() {
           <p className="text-sm text-slate-500 mt-2">Analyzing...</p>
         )}
         {mutation.isError && (
-          <p className="text-red-600 text-sm mt-2">{(mutation.error as Error).message}</p>
+          <p className="text-red-600 text-sm mt-2">Something went wrong submitting this. ({(mutation.error as Error).message})</p>
         )}
       </form>
     </div>

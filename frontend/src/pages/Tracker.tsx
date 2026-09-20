@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listTrackerItems, resolveActionItem } from "../api/meetingActionItems";
+import { capitalizeWords } from "../utils/formatDecision";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -31,7 +32,7 @@ function Tracker() {
   });
 
   if (isLoading) return <p>Loading tracker...</p>;
-  if (error) return <p className="text-red-600">Error: {(error as Error).message}</p>;
+  if (error) return <p className="text-red-600">Something went wrong loading the tracker. ({(error as Error).message})</p>;
 
   return (
     <div>
@@ -70,7 +71,11 @@ function Tracker() {
             <div className="flex justify-between items-start">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-medium">{item.owner}</span>
+                  {/* Owner names are stored lowercase in the database
+                      (MANAGER_MAP keys and recurrence/follow-up
+                      matching both depend on that) — capitalized here
+                      only for display, never touching the stored value. */}
+                  <span className="text-sm font-medium">{capitalizeWords(item.owner)}</span>
                   {item.is_recurring && (
                     <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
                       Recurring
@@ -106,7 +111,7 @@ function Tracker() {
                   onClick={() => mutation.mutate(item.id)}
                   disabled={mutation.isPending}
                   title="Manually mark this item resolved — for cases resolved outside the tracked system (e.g. a direct conversation with the manager)"
-                  className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                  className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-green-600 whitespace-nowrap"
                 >
                   Mark Resolved
                 </button>

@@ -93,7 +93,7 @@ export interface DecisionBullet {
   items?: DecisionBullet[][];
 }
 
-function capitalizeWords(value: string): string {
+export function capitalizeWords(value: string): string {
   return value
     .split(" ")
     .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))

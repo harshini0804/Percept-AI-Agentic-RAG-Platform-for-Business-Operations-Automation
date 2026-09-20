@@ -3,18 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { listAgentRuns, getAgentRunStats } from "../api/agentRuns";
 import { ExternalLink } from "lucide-react";
+import { getVerticalLabel, VERTICAL_LABELS } from "../utils/verticals";
+import { formatConfidence } from "../utils/formatScore";
 
-// Mirrors the four real verticals (Section 4.3) plus the dummy
-// reference vertical — same constant used in Escalations.tsx and
-// Notifications.tsx, kept here too since the backend doesn't expose
-// a canonical vertical list endpoint.
 const VERTICAL_OPTIONS = [
   { value: "", label: "All verticals" },
-  { value: "dummy", label: "Dummy" },
-  { value: "post_incident", label: "Post-Incident" },
-  { value: "internal_mobility", label: "Internal Mobility" },
-  { value: "contract_tracking", label: "Contract Tracking" },
-  { value: "meeting_action_items", label: "Meeting Action Items" },
+  ...Object.entries(VERTICAL_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 function Dashboard() {
@@ -34,8 +28,8 @@ function Dashboard() {
   });
 
   if (runsLoading || statsLoading) return <p>Loading runs...</p>;
-  if (runsError) return <p className="text-red-600">Error: {(runsError as Error).message}</p>;
-  if (statsError) return <p className="text-red-600">Error: {(statsError as Error).message}</p>;
+  if (runsError) return <p className="text-red-600">Something went wrong loading runs. ({(runsError as Error).message})</p>;
+  if (statsError) return <p className="text-red-600">Something went wrong loading stats. ({(statsError as Error).message})</p>;
 
   return (
     <div>
@@ -87,14 +81,14 @@ function Dashboard() {
             <th className="p-3">Vertical</th>
             <th className="p-3">Status</th>
             <th className="p-3">Confidence</th>
-            <th className="p-3">Created</th>
+            <th className="p-3">Created On</th>
             <th className="p-3"></th>
           </tr>
         </thead>
         <tbody>
           {runs?.map((run) => (
             <tr key={run.id} className="border-b hover:bg-slate-50">
-              <td className="p-3">{run.vertical}</td>
+              <td className="p-3">{getVerticalLabel(run.vertical)}</td>
               <td className="p-3">
                 <span
                   className={
@@ -110,7 +104,7 @@ function Dashboard() {
                   {run.status}
                 </span>
               </td>
-              <td className="p-3">{run.confidence?.toFixed(2) ?? "—"}</td>
+              <td className="p-3">{formatConfidence(run.confidence)}</td>
               <td className="p-3">{new Date(run.created_at).toLocaleString()}</td>
               <td className="p-3">
                 <Link

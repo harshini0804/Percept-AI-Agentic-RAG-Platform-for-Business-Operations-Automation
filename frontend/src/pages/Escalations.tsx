@@ -3,18 +3,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
 import { listEscalations, resolveEscalation } from "../api/escalations";
+import { getVerticalLabel, VERTICAL_LABELS } from "../utils/verticals";
+import { DecisionBulletList } from "../components/DecisionBullets";
 
-// Mirrors the four real verticals (Section 4.3) plus the dummy
-// reference vertical — kept as a simple constant here since the
-// backend doesn't (deliberately, per the agent contract's design)
-// expose a canonical vertical list endpoint.
 const VERTICAL_OPTIONS = [
   { value: "", label: "All verticals" },
-  { value: "dummy", label: "Dummy" },
-  { value: "post_incident", label: "Post-Incident" },
-  { value: "internal_mobility", label: "Internal Mobility" },
-  { value: "contract_tracking", label: "Contract Tracking" },
-  { value: "meeting_action_items", label: "Meeting Action Items" },
+  ...Object.entries(VERTICAL_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 function daysElapsed(createdAt: string): string {
@@ -47,7 +41,7 @@ function Escalations() {
   });
 
   if (isLoading) return <p>Loading escalations...</p>;
-  if (error) return <p className="text-red-600">Error: {(error as Error).message}</p>;
+  if (error) return <p className="text-red-600">Something went wrong loading escalations. ({(error as Error).message})</p>;
 
   return (
     <div>
@@ -79,7 +73,7 @@ function Escalations() {
             <div className="flex justify-between items-start mb-2">
               <div>
                 <span className="text-xs uppercase tracking-wide text-slate-400">
-                  {esc.vertical}
+                  {getVerticalLabel(esc.vertical)}
                 </span>
                 <p className="text-sm text-slate-700 mt-1">{esc.reason}</p>
                 <div className="flex items-center gap-2 mt-1.5">
@@ -100,9 +94,12 @@ function Escalations() {
             </div>
 
             {esc.pending_action ? (
-              <p className="text-xs text-slate-500 mb-3">
-                Pending action: <span className="font-mono">{esc.pending_action.tool_name}</span>
-              </p>
+              <div className="bg-slate-50 rounded-lg p-3 mb-3">
+                <p className="text-xs font-medium text-slate-500 mb-1.5">
+                  Pending action: {esc.pending_action.tool_name}
+                </p>
+                <DecisionBulletList detail={esc.pending_action.arguments} />
+              </div>
             ) : (
               <p className="text-xs text-slate-400 mb-3">No action was proposed for this case.</p>
             )}
@@ -111,14 +108,15 @@ function Escalations() {
               <button
                 onClick={() => mutation.mutate({ id: esc.id, approve: true })}
                 disabled={mutation.isPending || !esc.pending_action}
-                className="bg-green-600 text-white text-sm px-3 py-1.5 rounded-lg disabled:opacity-50"
+                title={!esc.pending_action ? "No pending action to approve for this case" : undefined}
+                className="bg-green-600 hover:bg-green-700 text-white text-xs font-medium px-3 py-1 rounded-lg cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-green-600"
               >
                 Approve
               </button>
               <button
                 onClick={() => mutation.mutate({ id: esc.id, approve: false })}
                 disabled={mutation.isPending}
-                className="bg-red-100 text-red-700 text-sm px-3 py-1.5 rounded-lg disabled:opacity-50"
+                className="bg-red-600 hover:bg-red-700 text-white text-xs font-medium px-3 py-1 rounded-lg cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-600"
               >
                 Reject
               </button>

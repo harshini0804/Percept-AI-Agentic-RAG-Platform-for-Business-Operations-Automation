@@ -1,20 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Check } from "lucide-react";
 import { listNotifications, markNotificationRead } from "../api/notifications";
+import { getVerticalLabel, VERTICAL_LABELS } from "../utils/verticals";
 
-// Mirrors the four real verticals (Section 4.3) plus the dummy
-// reference vertical — same constant used in Escalations.tsx, kept
-// here too since the backend doesn't expose a canonical vertical
-// list endpoint.
 const VERTICAL_OPTIONS = [
   { value: "", label: "All verticals" },
-  { value: "dummy", label: "Dummy" },
-  { value: "post_incident", label: "Post-Incident" },
-  { value: "internal_mobility", label: "Internal Mobility" },
-  { value: "contract_tracking", label: "Contract Tracking" },
-  { value: "meeting_action_items", label: "Meeting Action Items" },
+  ...Object.entries(VERTICAL_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 function Notifications() {
@@ -35,7 +28,7 @@ function Notifications() {
   });
 
   if (isLoading) return <p>Loading notifications...</p>;
-  if (error) return <p className="text-red-600">Error: {(error as Error).message}</p>;
+  if (error) return <p className="text-red-600">Something went wrong loading notifications. ({(error as Error).message})</p>;
 
   return (
     <div>
@@ -78,7 +71,7 @@ function Notifications() {
           >
             <div>
               <span className="text-xs uppercase tracking-wide text-slate-400">
-                {n.vertical}
+                {getVerticalLabel(n.vertical)}
               </span>
               <p className="text-sm text-slate-500 mt-0.5">{n.recipient}</p>
               <p className="text-sm">{n.message}</p>
@@ -99,9 +92,10 @@ function Notifications() {
               <button
                 onClick={() => mutation.mutate(n.id)}
                 disabled={mutation.isPending}
-                className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded disabled:opacity-50"
+                title="Mark as read"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-full text-slate-400 hover:text-green-700 hover:bg-green-50 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Mark read
+                <Check size={16} />
               </button>
             )}
           </div>

@@ -60,7 +60,7 @@ def test_call_llm_returns_plain_text_response(monkeypatch):
         _FakeMessage(content="Hello there.")
     )
 
-    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda: fake_client)
+    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda key_index=0: fake_client)
 
     result = call_llm(messages=[{"role": "user", "content": "hi"}])
     assert result == {"content": "Hello there.", "tool_calls": []}
@@ -77,7 +77,7 @@ def test_call_llm_returns_tool_calls(monkeypatch):
         )
     )
 
-    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda: fake_client)
+    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda key_index=0: fake_client)
 
     tools = [{"name": "get_ticket_status", "description": "...", "parameters": {}}]
     result = call_llm(messages=[{"role": "user", "content": "check it"}], tools=tools)
@@ -124,7 +124,7 @@ def test_call_llm_recovers_from_gpt_oss_phantom_tool_bug(monkeypatch):
     fake_client.chat.completions = type("FakeCompletions", (), {})()
     fake_client.chat.completions.create = fake_create
 
-    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda: fake_client)
+    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda key_index=0: fake_client)
 
     tools = [{"name": "some_tool", "description": "...", "parameters": {}}]
     result = call_llm(messages=[{"role": "user", "content": "test"}], tools=tools)
@@ -149,7 +149,7 @@ def test_call_llm_reraises_unrelated_bad_request_errors(monkeypatch):
         raise unrelated_error
 
     fake_client.chat.completions.create = fake_create
-    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda: fake_client)
+    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda key_index=0: fake_client)
 
     with pytest.raises(BadRequestError, match="model_not_found"):
         call_llm(messages=[{"role": "user", "content": "test"}])
@@ -166,7 +166,7 @@ def test_call_llm_without_tools_never_triggers_phantom_bug_check(monkeypatch):
     fake_client.chat.completions = type("FakeCompletions", (), {})()
     fake_client.chat.completions.create = lambda **kwargs: (_ for _ in ()).throw(error)
 
-    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda: fake_client)
+    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda key_index=0: fake_client)
 
     with pytest.raises(BadRequestError):
         call_llm(messages=[{"role": "user", "content": "test"}], tools=None)

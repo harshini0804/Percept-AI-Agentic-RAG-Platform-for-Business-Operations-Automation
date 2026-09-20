@@ -102,7 +102,7 @@ def _classify_error(exc: Exception) -> str:
     return "Unexpected error during clause extraction"
 
 
-def _extract_clause(clause_text: str, extra_context: str | None = None) -> dict:
+def _extract_clause(clause_text: str, extra_context: str | None = None, key_index: int = 0) -> dict:
     """One LLM call: extracts the structured obligation shape (Section
     8.3, workflow step 2) from a single clause. If extra_context is
     given (the resolved text of a cross-referenced clause), it's
@@ -119,6 +119,7 @@ def _extract_clause(clause_text: str, extra_context: str | None = None) -> dict:
             {"role": "user", "content": user_content},
         ],
         temperature=0.0,
+        key_index=key_index,
     )
 
     import json
@@ -191,7 +192,7 @@ def _insert_contract(vendor_name: str | None, doc_id: str | None, run_id: str) -
         conn.close()
 
 
-def _process_clause(run_id: str, contract_id: str, clause: dict) -> dict:
+def _process_clause(run_id: str, contract_id: str, clause: dict, clause_index: int = 0) -> dict:
     """
     Handles one clause end to end: extraction, optional cross-
     reference re-extraction, optional precedent check, obligation
@@ -199,7 +200,10 @@ def _process_clause(run_id: str, contract_id: str, clause: dict) -> dict:
     persistence into the KB. Returns a dict describing what
     happened, for the caller to fold into the run's final state.
     """
-    extraction = _extract_clause(clause["text"])
+    # Alternate API keys per clause to halve each key's token consumption
+    # (Section 12.2 / two-key strategy). Chunking always uses key 0.
+    key_index = clause_index % 2
+    extraction = _extract_clause(clause["text"], key_index=key_index)
     log_decision(run_id, "llm_reasoning", {
         "clause_number": clause["clause_number"],
         "extraction": extraction,
@@ -217,7 +221,7 @@ def _process_clause(run_id: str, contract_id: str, clause: dict) -> dict:
             "found": surrounding["found"],
         })
         if surrounding["found"]:
-            extraction = _extract_clause(clause["text"], extra_context=surrounding["text"])
+            extraction = _extract_clause(clause["text"], extra_context=surrounding["text"], key_index=key_index)
             log_decision(run_id, "llm_reasoning", {
                 "clause_number": clause["clause_number"],
                 "extraction": extraction,
@@ -344,7 +348,7 @@ def run_contract_tracking_vertical(agent_input: AgentRunInput) -> AgentRunOutput
     partial_failure = None
     for i, clause in enumerate(clauses):
         try:
-            clause_results.append(_process_clause(run_id, contract_id, clause))
+            clause_results.append(_process_clause(run_id, contract_id, clause, clause_index=i))
         except Exception as e:
             unprocessed = [c["clause_number"] for c in clauses[i:]]
             partial_failure = {

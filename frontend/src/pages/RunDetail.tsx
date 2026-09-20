@@ -5,7 +5,8 @@ import { getAgentRun } from "../api/agentRuns";
 import { getVerticalLabel } from "../utils/verticals";
 import { formatRunMeta } from "../utils/formatDate";
 import { formatConfidence, describeRetrievalScore } from "../utils/formatScore";
-import { formatDecisionDetail, prettifySnakeCase, tryParseJsonObject  } from "../utils/formatDecision";
+import { prettifySnakeCase, tryParseJsonObject } from "../utils/formatDecision";
+import { DecisionBulletList } from "../components/DecisionBullets";
 
 function ConfidenceBadge({ confidence }: { confidence: number | null }) {
   if (confidence === null) return <span className="text-slate-400">—</span>;
@@ -60,35 +61,6 @@ function ReminderBadge({ created }: { created: boolean }) {
     <span className="px-2 py-1 rounded text-xs font-medium bg-amber-100 text-amber-800">
       Needs review
     </span>
-  );
-}
-
-// Renders a formatDecisionDetail() bullet list — shared by the
-// Reasoning and Action Taken panels so both get identical treatment.
-function DecisionBulletList({ detail }: { detail: Record<string, unknown> | null | undefined }) {
-  const bullets = formatDecisionDetail(detail);
-  if (bullets.length === 0) return <p className="text-sm text-slate-400">No details available.</p>;
-  return <BulletList bullets={bullets} />;
-}
-
-function BulletList({ bullets }: { bullets: ReturnType<typeof formatDecisionDetail> }) {
-  return (
-    <ul className="text-sm text-slate-700 space-y-1.5">
-      {bullets.map((b) => (
-        <li key={b.key}>
-          <span className="font-medium">{b.label}:</span> {b.value}
-          {b.items && b.items.length > 0 && (
-            <ul className="ml-5 mt-1.5 space-y-2">
-              {b.items.map((group, i) => (
-                <li key={i} className="border-l-2 border-slate-200 pl-3">
-                  <BulletList bullets={group} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -148,11 +120,18 @@ function RunDetail() {
         </div>
       )}
 
-      {/* Reasoning panel — a plain string "content" (the dummy
-          vertical's shape) renders as prose; anything else renders
-          as generic label/value bullets via formatDecisionDetail,
-          which works for any vertical's JSON shape with no
-          per-vertical code. */}
+      {/* Reasoning panel. Three possible shapes, checked in order:
+          (1) content is a plain free-text string (dummy vertical) —
+              rendered as prose.
+          (2) content is a STRING that is itself JSON (internal_mobility
+              logs its whole structured ranking result this way,
+              unlike every other vertical) — parsed, then rendered as
+              bullets like any other structured detail.
+          (3) detail itself is already a real nested object
+              ({verdict, confidence}, {extracted_count, items}, etc.)
+              — rendered as bullets directly via formatDecisionDetail,
+              which works for any vertical's shape with no
+              per-vertical code. */}
       {reasoningStep && (
         <div className="bg-white rounded shadow p-6 mb-4">
           <h3 className="font-medium mb-2">LLM Reasoning</h3>

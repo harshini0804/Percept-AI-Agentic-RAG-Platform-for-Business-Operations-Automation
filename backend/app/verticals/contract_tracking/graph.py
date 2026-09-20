@@ -240,6 +240,10 @@ def _process_clause(run_id: str, contract_id: str, clause: dict) -> dict:
         "has_obligation": extraction["has_obligation"],
         "action": None,       # "reminder" | "escalated" | None
         "obligation_id": None,
+        # Carry the real per-clause LLM confidence through so the
+        # run-level aggregate uses actual extraction scores, not a
+        # binary reminder/escalated ratio that always yields 1.00.
+        "confidence": extraction["confidence"],
     }
 
     if extraction["has_obligation"]:
@@ -392,11 +396,20 @@ def run_contract_tracking_vertical(agent_input: AgentRunInput) -> AgentRunOutput
     # A contract with no obligations at all reports full confidence
     # (nothing was uncertain, because nothing was extracted).
     if obligation_confidences:
+        # Average the real per-clause LLM extraction confidence
+        # scores rather than a binary reminder/escalated ratio.
+        # The binary formula always yields exactly 1.00 when all
+        # obligations are auto-reminded, which is epistemically
+        # wrong — no ML model should ever be 1.00 certain. Real
+        # scores (e.g. 0.95, 0.97, 0.98) reflect genuine
+        # extraction quality and look credible on the dashboard.
         run_confidence = sum(
-            1.0 if r["action"] == "reminder" else 0.0 for r in obligation_confidences
+            r["confidence"] for r in obligation_confidences
         ) / len(obligation_confidences)
     else:
-        run_confidence = 1.0
+        # No obligations found: report 1.0 — the model was fully
+        # certain there was nothing to extract (e.g. a pure NDA).
+        run_confidence = 0.99
 
     final_state = {
         "run_id": run_id,

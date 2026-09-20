@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, useLocation } from "react-router-dom";
 import Dashboard from "./pages/Dashboard.tsx";
 import Submit from "./pages/Submit";
 import RunDetail from "./pages/RunDetail";
@@ -7,7 +7,7 @@ import Notifications from "./pages/Notifications";
 import Admin from "./pages/Admin";
 import Evaluation from "./pages/Evaluation";
 import Tracker from "./pages/Tracker";
-
+import ErrorBoundary from "./components/ErrorBoundary";
 
 const NAV_ITEMS = [
   { path: "/", label: "Dashboard" },
@@ -18,6 +18,28 @@ const NAV_ITEMS = [
   { path: "/admin", label: "Admin" },
   { path: "/evaluation", label: "Evaluation" },
 ];
+
+// Split out so useLocation() can run inside the Router context, and
+// so the error boundary's key={pathname} resets its crashed state
+// automatically on navigation — otherwise a crash on one page would
+// keep showing the fallback even after moving to a different page.
+function AppRoutes() {
+  const location = useLocation();
+  return (
+    <ErrorBoundary key={location.pathname}>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/submit" element={<Submit />} />
+        <Route path="/runs/:runId" element={<RunDetail />} />
+        <Route path="/escalations" element={<Escalations />} />
+        <Route path="/notifications" element={<Notifications />} />
+        <Route path="/tracker" element={<Tracker />} />
+        <Route path="/admin" element={<Admin />} />
+        <Route path="/evaluation" element={<Evaluation />} />
+      </Routes>
+    </ErrorBoundary>
+  );
+}
 
 function App() {
   return (
@@ -38,16 +60,7 @@ function App() {
           ))}
         </nav>
         <main className="flex-1 overflow-y-auto p-6 bg-slate-50">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/submit" element={<Submit />} />
-            <Route path="/runs/:runId" element={<RunDetail />} />
-            <Route path="/escalations" element={<Escalations />} />
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/tracker" element={<Tracker />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/evaluation" element={<Evaluation />} />
-          </Routes>
+          <AppRoutes />
         </main>
       </div>
     </BrowserRouter>

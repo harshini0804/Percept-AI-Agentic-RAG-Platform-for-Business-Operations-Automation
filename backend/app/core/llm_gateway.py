@@ -98,6 +98,8 @@ def _call_with_retry(kwargs: dict, key_index: int) -> object:
     other_key = 1 - key_index  # 0→1 or 1→0
 
     for attempt in range(MAX_RETRIES + 1):
+        # First MAX_RETRIES attempts use the original key; the final
+        # attempt switches to the other key as a last-resort fallback.
         current_key = key_index if attempt < MAX_RETRIES else other_key
         client = _get_client(current_key)
 
@@ -105,12 +107,15 @@ def _call_with_retry(kwargs: dict, key_index: int) -> object:
             return client.chat.completions.create(**kwargs)
         except RateLimitError as e:
             if attempt < MAX_RETRIES:
+                # _parse_retry_after relies on regex-matching Groq's
+                # error message phrasing ("try again in Xms"). If Groq
+                # ever changes that wording, this silently falls back to
+                # DEFAULT_BACKOFF_SECONDS rather than breaking loudly.
                 wait = _parse_retry_after(str(e))
                 time.sleep(wait)
                 continue
-            # Last attempt also hit rate limit — try the other key once
-            if attempt == MAX_RETRIES - 1:
-                continue
+            # All retries on the original key exhausted and the final
+            # attempt on the other key also hit a rate limit — give up.
             raise
         except BadRequestError:
             raise  # never retry bad requests

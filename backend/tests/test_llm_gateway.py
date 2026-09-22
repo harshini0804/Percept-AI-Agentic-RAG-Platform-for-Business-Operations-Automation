@@ -6,9 +6,9 @@ GROQ_API_KEY.
 
 import httpx
 import pytest
-from groq import BadRequestError
+from groq import BadRequestError, RateLimitError
 
-from app.core.llm_gateway import call_llm, _format_tools_for_groq
+from app.core.llm_gateway import call_llm, _format_tools_for_groq, MAX_RETRIES
 
 
 class _FakeMessage:
@@ -181,3 +181,159 @@ def test_format_tools_for_groq_shape():
             "function": {"name": "t1", "description": "desc", "parameters": {"type": "object"}},
         }
     ]
+
+# ---------------------------------------------------------------
+# Retry/backoff and two-key fallback tests (Point 1 in PR #28 review)
+# ---------------------------------------------------------------
+
+def _make_rate_limit_error(message: str = "Error code: 429 - rate_limit_exceeded, try again in 10ms") -> RateLimitError:
+    """Builds a real groq.RateLimitError with a realistic message — same
+    constructor shape as BadRequestError (both subclass APIStatusError)."""
+    fake_http_response = httpx.Response(
+        status_code=429, request=httpx.Request("POST", "https://api.groq.com/x")
+    )
+    return RateLimitError(message, response=fake_http_response, body=None)
+
+
+def _make_success_response(text: str = "ok") -> object:
+    """Minimal fake Groq completion response for retry tests."""
+    msg = _FakeMessage(content=text)
+    choice = type("Choice", (), {"message": msg})()
+    return type("Response", (), {"choices": [choice]})()
+
+
+def test_retry_succeeds_on_second_attempt_same_key(monkeypatch):
+    """
+    First call raises RateLimitError, second call succeeds.
+    Confirms: retry fires on the SAME key (not immediately falling back)
+    and the successful result is returned rather than re-raising.
+    """
+    calls = []
+
+    def fake_create(**kwargs):
+        calls.append(len(calls))
+        if len(calls) == 1:
+            raise _make_rate_limit_error()
+        return _make_success_response("retry succeeded")
+
+    fake_client = type("FakeClient", (), {})()
+    fake_client.chat = type("C", (), {})()
+    fake_client.chat.completions = type("CC", (), {})()
+    fake_client.chat.completions.create = fake_create
+
+    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda key_index=0: fake_client)
+    monkeypatch.setattr("app.core.llm_gateway.time.sleep", lambda s: None)
+
+    result = call_llm(messages=[{"role": "user", "content": "test"}])
+
+    assert result["content"] == "retry succeeded"
+    assert len(calls) == 2  # one failure + one success, no more
+
+
+def test_retry_falls_back_to_other_key_after_max_retries(monkeypatch):
+    """
+    All calls on key 0 raise RateLimitError; call on key 1 succeeds.
+    Confirms: after MAX_RETRIES exhausted on key 0, the gateway
+    correctly switches to key 1 for the final attempt.
+    """
+    key_indices_used = []
+
+    def fake_get_client(key_index=0):
+        client = type("FakeClient", (), {})()
+        client.chat = type("C", (), {})()
+        client.chat.completions = type("CC", (), {})()
+
+        def fake_create(**kwargs):
+            key_indices_used.append(key_index)
+            if key_index == 0:
+                raise _make_rate_limit_error()
+            return _make_success_response("fallback key succeeded")
+
+        client.chat.completions.create = fake_create
+        return client
+
+    monkeypatch.setattr("app.core.llm_gateway._get_client", fake_get_client)
+    monkeypatch.setattr("app.core.llm_gateway.time.sleep", lambda s: None)
+
+    result = call_llm(messages=[{"role": "user", "content": "test"}], key_index=0)
+
+    assert result["content"] == "fallback key succeeded"
+    # key 0 used MAX_RETRIES times, then key 1 once
+    assert key_indices_used.count(0) == MAX_RETRIES
+    assert key_indices_used.count(1) == 1
+
+
+def test_retry_raises_when_both_keys_exhausted(monkeypatch):
+    """
+    All attempts on both keys raise RateLimitError.
+    Confirms: the gateway re-raises after all retries are exhausted
+    rather than swallowing the error or looping forever.
+    """
+    def fake_get_client(key_index=0):
+        client = type("FakeClient", (), {})()
+        client.chat = type("C", (), {})()
+        client.chat.completions = type("CC", (), {})()
+        client.chat.completions.create = lambda **kwargs: (_ for _ in ()).throw(
+            _make_rate_limit_error()
+        )
+        return client
+
+    monkeypatch.setattr("app.core.llm_gateway._get_client", fake_get_client)
+    monkeypatch.setattr("app.core.llm_gateway.time.sleep", lambda s: None)
+
+    with pytest.raises(RateLimitError):
+        call_llm(messages=[{"role": "user", "content": "test"}])
+
+
+def test_retry_waits_parsed_duration_from_error_message(monkeypatch):
+    """
+    Confirms _parse_retry_after extracts the wait time from the error
+    message and time.sleep is called with that value — not the default.
+    """
+    sleep_calls = []
+
+    def fake_create(**kwargs):
+        if len(sleep_calls) == 0:
+            raise _make_rate_limit_error("Error code: 429 - try again in 500ms")
+        return _make_success_response()
+
+    fake_client = type("FakeClient", (), {})()
+    fake_client.chat = type("C", (), {})()
+    fake_client.chat.completions = type("CC", (), {})()
+    fake_client.chat.completions.create = fake_create
+
+    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda key_index=0: fake_client)
+    monkeypatch.setattr("app.core.llm_gateway.time.sleep", lambda s: sleep_calls.append(s))
+
+    call_llm(messages=[{"role": "user", "content": "test"}])
+
+    assert len(sleep_calls) == 1
+    assert abs(sleep_calls[0] - 0.5) < 0.01  # 500ms = 0.5s
+
+
+def test_retry_uses_default_backoff_when_message_unparseable(monkeypatch):
+    """
+    Confirms graceful fallback to DEFAULT_BACKOFF_SECONDS when Groq's
+    error message doesn't contain the expected retry-after pattern —
+    e.g. if Groq changes their error message wording in the future.
+    """
+    from app.core.llm_gateway import DEFAULT_BACKOFF_SECONDS
+    sleep_calls = []
+
+    def fake_create(**kwargs):
+        if len(sleep_calls) == 0:
+            raise _make_rate_limit_error("Error code: 429 - quota exceeded")  # no timing hint
+        return _make_success_response()
+
+    fake_client = type("FakeClient", (), {})()
+    fake_client.chat = type("C", (), {})()
+    fake_client.chat.completions = type("CC", (), {})()
+    fake_client.chat.completions.create = fake_create
+
+    monkeypatch.setattr("app.core.llm_gateway._get_client", lambda key_index=0: fake_client)
+    monkeypatch.setattr("app.core.llm_gateway.time.sleep", lambda s: sleep_calls.append(s))
+
+    call_llm(messages=[{"role": "user", "content": "test"}])
+
+    assert len(sleep_calls) == 1
+    assert sleep_calls[0] == DEFAULT_BACKOFF_SECONDS

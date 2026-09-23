@@ -182,6 +182,136 @@ def test_reason_node_executes_tool_call_then_reasons_again(monkeypatch, existing
     assert step_types[-1] == "llm_reasoning"
 
 
+def test_reason_node_two_sequential_tool_rounds(monkeypatch, existing_run_id):
+    """Verifies the multi-round tool-calling loop: LLM calls tool A in
+    round 1, then tool B in round 2, then produces a final text answer
+    that reflects both results."""
+    call_count = 0
+
+    def fake_call_llm(messages, tools=None):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # Round 1: call get_incident_details
+            return {
+                "content": None,
+                "tool_calls": [{"name": "get_incident_details", "arguments": {"incident_id": "inc-1"}}],
+            }
+        if call_count == 2:
+            # Round 2: call lookup_incidents_by_service
+            return {
+                "content": None,
+                "tool_calls": [{"name": "lookup_incidents_by_service", "arguments": {"service": "payments"}}],
+            }
+        # Round 3: final text answer
+        return {"content": "Root cause is db-pool-exhaustion across payments incidents inc-1 and inc-2", "tool_calls": []}
+
+    tool_results = []
+
+    def fake_execute_tool(vertical, name, args):
+        result = {"tool": name, "args": args, "data": f"result_for_{name}"}
+        tool_results.append(result)
+        return result
+
+    monkeypatch.setattr(
+        "app.core.orchestration.get_tools_for_vertical",
+        lambda v: [
+            {"name": "get_incident_details", "description": "d", "parameters": {}},
+            {"name": "lookup_incidents_by_service", "description": "d", "parameters": {}},
+        ],
+    )
+    monkeypatch.setattr("app.core.orchestration.call_llm", fake_call_llm)
+    monkeypatch.setattr("app.core.orchestration.execute_tool", fake_execute_tool)
+
+    state = {
+        "run_id": existing_run_id,
+        "vertical": "dummy",
+        "input_text": "input",
+        "system_prompt": "prompt",
+        "retrieval_results": [],
+    }
+    result = reason_node(state)
+
+    # call_llm invoked 3 times: initial + after round 1 + after round 2
+    assert call_count == 3
+    # Both tools were executed
+    assert len(tool_results) == 2
+    assert tool_results[0]["tool"] == "get_incident_details"
+    assert tool_results[1]["tool"] == "lookup_incidents_by_service"
+    # all_tool_calls in state contains both rounds
+    assert len(result["tool_calls"]) == 2
+    # Final answer reflects both results
+    assert "db-pool-exhaustion" in result["llm_content"]
+
+    # Decision log should contain 2 tool_call entries + 1 llm_reasoning
+    decisions = _fetch_decisions(existing_run_id)
+    step_types = [d["step_type"] for d in decisions]
+    assert step_types.count("tool_call") == 2
+    assert step_types[-1] == "llm_reasoning"
+
+
+def test_reason_node_forced_text_fallback_after_max_steps(monkeypatch, existing_run_id):
+    """Verifies the forced-text-completion fallback: if the LLM keeps
+    requesting tool calls after max_steps is reached, reason_node makes
+    one final call_llm(tools=None) to force a text response."""
+    # Use env var to set max_steps=2 (validates env-config fix too)
+    monkeypatch.setenv("REASON_NODE_MAX_STEPS", "2")
+
+    call_count = 0
+    tools_arg_log = []
+
+    def fake_call_llm(messages, tools=None):
+        nonlocal call_count
+        call_count += 1
+        tools_arg_log.append(tools)
+
+        if call_count <= 3:
+            # Rounds 1-3: stubbornly keep calling tools
+            return {
+                "content": None,
+                "tool_calls": [{"name": "some_tool", "arguments": {"round": call_count}}],
+            }
+        # Final forced-text call (tools=None)
+        return {"content": "forced fallback answer after max steps", "tool_calls": []}
+
+    monkeypatch.setattr(
+        "app.core.orchestration.get_tools_for_vertical",
+        lambda v: [{"name": "some_tool", "description": "d", "parameters": {}}],
+    )
+    monkeypatch.setattr("app.core.orchestration.call_llm", fake_call_llm)
+    monkeypatch.setattr(
+        "app.core.orchestration.execute_tool",
+        lambda vertical, name, args: {"ok": True},
+    )
+
+    state = {
+        "run_id": existing_run_id,
+        "vertical": "dummy",
+        "input_text": "input",
+        "system_prompt": "prompt",
+        "retrieval_results": [],
+    }
+    result = reason_node(state)
+
+    # call_llm called 4 times:
+    #   1: initial (returns tool_calls) → round 1
+    #   2: after round 1 tools, step_count=1 < max_steps=2, tools passed (returns tool_calls) → round 2
+    #   3: after round 2 tools, step_count=2 == max_steps=2, tools=None passed (returns tool_calls still)
+    #   4: forced fallback (tools=None) because response still had tool_calls
+    assert call_count == 4
+
+    # The 3rd call should have tools=None (step_count reached max_steps)
+    assert tools_arg_log[2] is None
+    # The 4th call (forced fallback) should also have tools=None
+    assert tools_arg_log[3] is None
+
+    # Final content is not None — the fallback worked
+    assert result["llm_content"] == "forced fallback answer after max steps"
+    # 2 tool calls were executed (one per round within max_steps)
+    assert len(result["tool_calls"]) == 2
+
+
+
 def test_action_gate_node_fires_action_when_confidence_meets_threshold(
     monkeypatch, existing_run_id
 ):

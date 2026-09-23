@@ -10,6 +10,7 @@ extend this with extra fields as needed.
 """
 
 import json
+import os
 from typing import TypedDict, Optional, Any
 from langgraph.graph import StateGraph, END
 
@@ -114,17 +115,17 @@ def reason_node(state: AgentState) -> AgentState:
     response = call_llm(messages=messages, tools=tools)
 
     step_count = 0
-    max_steps = 3
+    max_steps = int(os.getenv("REASON_NODE_MAX_STEPS", "3"))
     all_tool_calls = []
 
     while response.get("tool_calls") and step_count < max_steps:
         step_count += 1
         tcs = response["tool_calls"]
         all_tool_calls.extend(tcs)
-        for tc in tcs:
+        for i, tc in enumerate(tcs):
             log_decision(state["run_id"], "tool_call", tc)
             result = execute_tool(state["vertical"], tc["name"], tc["arguments"])
-            tc_id = tc.get("id") or f"call_{tc['name']}"
+            tc_id = tc.get("id") or f"call_{tc['name']}_{step_count}_{i}"
             messages.append({
                 "role": "assistant",
                 "content": None,

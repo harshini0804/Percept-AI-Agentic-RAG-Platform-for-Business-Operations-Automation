@@ -9,6 +9,7 @@ import { formatRunMeta } from "../utils/formatDate";
 import { formatConfidence, describeRetrievalScore } from "../utils/formatScore";
 import { prettifySnakeCase, tryParseJsonObject } from "../utils/formatDecision";
 import { DecisionBulletList } from "../components/DecisionBullets";
+import { RetrievedResultsList, type RetrievedResult } from "../components/RetrievedResultsList";
 
 function ConfidenceBadge({ confidence }: { confidence: number | null }) {
   if (confidence === null) return <span className="text-slate-400">—</span>;
@@ -162,7 +163,7 @@ function RunDetail() {
       {/* Retrieved context panel */}
       {retrievalStep && (
         <div className="bg-white rounded shadow p-6 mb-4">
-          <h3 className="font-medium mb-2">Retrieved Context</h3>
+                    <h3 className="font-medium mb-2">Retrieved Context</h3>
           <p className="text-sm text-slate-600">
             {describeRetrievalScore(
               retrievalStep.detail?.top_score as number | null,
@@ -170,6 +171,9 @@ function RunDetail() {
             )}
             {retrievalStep.detail?.retried ? " · retried once" : ""}
           </p>
+          {Array.isArray(retrievalStep.detail?.results) && (
+            <RetrievedResultsList results={retrievalStep.detail.results as RetrievedResult[]} />
+          )}
         </div>
       )}
 

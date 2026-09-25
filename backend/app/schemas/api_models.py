@@ -29,6 +29,12 @@ class AgentRunDetail(AgentRunSummary):
     decisions: list[AgentDecisionDetail]
     # Vertical 2 (internal_mobility, Section 8.2): the ranked candidate
     # leaderboard for this run. Empty for non-internal-mobility runs.
+
+    # The document this run was submitted from, if it was a file
+    # upload rather than pasted text — powers the "view original
+    # document" section on the Report viewer. None for pasted-text
+    # submissions (there's no documents row to point to).
+    input_document_id: Optional[str] = None
     role_matches: list["RoleMatchSummary"] = []
     # Vertical 3 (contract_tracking, Section 8.3): every obligation
     # extracted from this run's contract. Empty for non-contract-
@@ -117,5 +123,18 @@ class ActionItemTrackerEntry(BaseModel):
     escalated: bool
     is_recurring: bool
     created_at: datetime
+
+class DocumentContent(BaseModel):
+    """
+    The original uploaded document behind a run's input_document_id —
+    powers the "view original document" section on the Report viewer.
+    Only exists for file-upload submissions; pasted-text submissions
+    have no documents row at all.
+    """
+    id: str
+    filename: str
+    vertical: str
+    uploaded_at: datetime
+    content: str
 
 AgentRunDetail.model_rebuild()

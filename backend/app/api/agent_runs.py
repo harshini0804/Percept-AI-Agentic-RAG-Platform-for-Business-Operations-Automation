@@ -93,7 +93,7 @@ def get_agent_run(run_id: str):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, vertical, trigger_type, status, confidence, created_at
+                SELECT id, vertical, trigger_type, status, confidence, created_at, input_document_id
                 FROM agent_runs WHERE id = %s;
                 """,
                 (run_id,),

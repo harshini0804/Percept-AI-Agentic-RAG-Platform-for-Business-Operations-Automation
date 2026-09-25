@@ -111,6 +111,29 @@ def test_agent_run_detail_obligations_empty_for_other_verticals():
     assert response.status_code == 200
     assert response.json()["obligations"] == []
 
+def test_agent_run_detail_includes_input_document_id_for_file_uploads(monkeypatch, tmp_path):
+    import app.core.documents as documents_module
+    from app.core.documents import create_document
+
+    monkeypatch.setattr(documents_module, "SUBMITTED_ROOT", tmp_path / "submitted")
+
+    doc_id = create_document(vertical="dummy", filename="a.txt", raw_bytes=b"content")
+    run_id = create_agent_run(vertical="dummy", trigger_type="upload", input_document_id=doc_id)
+    complete_agent_run(run_id, status="completed", confidence=0.9)
+
+    response = client.get(f"/agent-runs/{run_id}")
+    assert response.status_code == 200
+    assert response.json()["input_document_id"] == doc_id
+
+
+def test_agent_run_detail_input_document_id_null_for_pasted_text():
+    run_id = create_agent_run(vertical="dummy", trigger_type="upload")
+    complete_agent_run(run_id, status="completed", confidence=0.9)
+
+    response = client.get(f"/agent-runs/{run_id}")
+    assert response.status_code == 200
+    assert response.json()["input_document_id"] is None
+
 
 def test_get_nonexistent_agent_run_returns_404():
     import uuid

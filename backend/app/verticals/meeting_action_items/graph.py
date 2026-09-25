@@ -110,11 +110,15 @@ def _extract_candidate_items(transcript_text: str) -> list[dict]:
 
 def _check_recurrence(
     vertical: str, owner: str, description: str
-) -> tuple[bool, str | None, float | None]:
+) -> tuple[bool, str | None, float | None, list[dict]]:
     """
     Searches for a strong match among this owner's other open action
     items (Section 8.4's recurrence check). Returns
-    (is_recurring, matched_action_item_id_or_None, top_similarity_or_None).
+    (is_recurring, matched_action_item_id_or_None, top_similarity_or_None,
+    raw_results) — raw_results is returned too (not just the reduced
+    top_score) so the caller's retrieval decision can log full
+    per-chunk content for the Report viewer's clickable document list
+    (UI feature 3), not just the summary score.
     """
     results, _ = search_with_retry(
         query_text=description,
@@ -128,8 +132,8 @@ def _check_recurrence(
 
     top_score = results[0]["similarity"] if results else None
     if results and results[0]["similarity"] >= RECURRENCE_MATCH_THRESHOLD:
-        return True, str(results[0]["source_id"]), top_score
-    return False, None, top_score
+        return True, str(results[0]["source_id"]), top_score, results
+    return False, None, top_score, results
 
 
 def _insert_action_item(
@@ -191,7 +195,7 @@ def run_meeting_action_items(agent_input: AgentRunInput) -> AgentRunOutput:
         description = item["description"]
         deadline = item.get("deadline") or None
 
-        is_recurring, recurring_from, top_score = _check_recurrence(
+        is_recurring, recurring_from, top_score, recurrence_results = _check_recurrence(
             agent_input.vertical, owner, description
         )
         log_decision(
@@ -202,7 +206,11 @@ def run_meeting_action_items(agent_input: AgentRunInput) -> AgentRunOutput:
                 "is_recurring": is_recurring,
                 "recurring_from": recurring_from,
                 "top_score": top_score,
-                "num_results": 1 if top_score is not None else 0,
+                "num_results": len(recurrence_results),
+                "results": [
+                    {"id": str(r["id"]), "chunk_text": r["chunk_text"], "similarity": r["similarity"]}
+                    for r in recurrence_results
+                ],
             },
         )
 

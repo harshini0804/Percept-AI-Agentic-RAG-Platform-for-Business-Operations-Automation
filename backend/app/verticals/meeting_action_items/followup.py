@@ -163,7 +163,15 @@ def check_and_act_on_item(item: dict) -> dict | None:
     log_decision(
         run_id,
         "retrieval",
-        {"owner": owner, "num_results": len(evidence), "top_score": top_score},
+        {
+            "owner": owner,
+            "num_results": len(evidence),
+            "top_score": top_score,
+            "results": [
+                {"id": str(e["id"]), "chunk_text": e["chunk_text"], "similarity": e["similarity"]}
+                for e in evidence
+            ],
+        },
     )
     log_decision(run_id, "llm_reasoning", verdict_result)
 

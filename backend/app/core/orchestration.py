@@ -93,6 +93,15 @@ def retrieve_node(state: AgentState) -> AgentState:
             "top_score": results[0]["similarity"] if results else 0.0,
             "num_results": len(results),
             "retried": retried,
+            # Full per-chunk content, not just summary stats — powers
+            # the Report viewer's clickable "view retrieved document"
+            # list (UI feature 3). Purely additive: top_score/
+            # num_results/retried keep their exact prior meaning, so
+            # nothing reading only those two breaks.
+            "results": [
+                {"id": str(r["id"]), "chunk_text": r["chunk_text"], "similarity": r["similarity"]}
+                for r in results
+            ],
         },
     )
     return state

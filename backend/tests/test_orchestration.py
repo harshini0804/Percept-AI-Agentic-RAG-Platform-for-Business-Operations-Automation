@@ -71,8 +71,8 @@ def test_embed_node_sets_embedding(monkeypatch):
 
 def test_retrieve_node_logs_decision_with_top_score(monkeypatch, existing_run_id):
     fake_results = [
-        {"chunk_text": "chunk one", "similarity": 0.87},
-        {"chunk_text": "chunk two", "similarity": 0.5},
+        {"id": "11111111-1111-1111-1111-111111111111", "chunk_text": "chunk one", "similarity": 0.87},
+        {"id": "22222222-2222-2222-2222-222222222222", "chunk_text": "chunk two", "similarity": 0.5},
     ]
     monkeypatch.setattr(
         "app.core.orchestration.search_with_retry",

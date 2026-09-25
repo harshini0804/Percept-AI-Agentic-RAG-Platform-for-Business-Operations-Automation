@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
 import { getAgentRun } from "../api/agentRuns";
+import { getDocument } from "../api/documents";
 import { getVerticalLabel } from "../utils/verticals";
 import { formatRunMeta } from "../utils/formatDate";
 import { formatConfidence, describeRetrievalScore } from "../utils/formatScore";
@@ -64,6 +66,55 @@ function ReminderBadge({ created }: { created: boolean }) {
   );
 }
 
+// Original uploaded document behind a run's input_document_id.
+// Lazily fetched — only requested once the user actually expands the
+// panel, so viewing a run doesn't unconditionally pull the full
+// document text on every page load. Absent entirely for pasted-text
+// submissions (no documents row to point to) — the common case, so
+// nothing is shown rather than a callout stating the absence.
+function OriginalDocumentPanel({ documentId }: { documentId: string }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["document", documentId],
+    queryFn: () => getDocument(documentId),
+    enabled: expanded,
+  });
+
+  return (
+    <div className="bg-white rounded shadow p-6 mb-4">
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className="flex items-center justify-between w-full text-left cursor-pointer"
+      >
+        <h3 className="font-medium">Original Document</h3>
+        {expanded ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
+      </button>
+
+      {expanded && (
+        <div className="mt-3">
+          {isLoading && <p className="text-sm text-slate-500">Loading document...</p>}
+          {error && (
+            <p className="text-sm text-red-600">
+              Something went wrong loading this document. ({(error as Error).message})
+            </p>
+          )}
+          {data && (
+            <>
+              <p className="text-xs text-slate-400 mb-2">
+                {data.filename} · uploaded {new Date(data.uploaded_at).toLocaleString()}
+              </p>
+              <pre className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 p-3 rounded max-h-96 overflow-y-auto">
+                {data.content}
+              </pre>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RunDetail() {
   const { runId } = useParams<{ runId: string }>();
 
@@ -105,6 +156,8 @@ function RunDetail() {
           </div>
         </div>
       </div>
+      {run.input_document_id && <OriginalDocumentPanel documentId={run.input_document_id} />}
+
 
       {/* Retrieved context panel */}
       {retrievalStep && (

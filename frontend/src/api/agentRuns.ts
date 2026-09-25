@@ -18,6 +18,7 @@ export interface AgentDecisionDetail {
 
 export interface AgentRunDetail extends AgentRunSummary {
   decisions: AgentDecisionDetail[];
+  input_document_id: string | null;
   role_matches: RoleMatchSummary[];
   obligations: ObligationSummary[];
 }

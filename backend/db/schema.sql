@@ -169,7 +169,14 @@ CREATE TABLE contracts (
     doc_id          UUID REFERENCES documents(id),
     run_id          UUID REFERENCES agent_runs(id),
     uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    vendor_name     TEXT
+    vendor_name     TEXT,
+    -- Effective Date extracted from the contract text itself (Section 8.3
+    -- obligation_date resolution: Approach 3 — extract from document rather
+    -- than require user input). Used as the reference point for computing
+    -- absolute obligation dates from relative durations like "60 days before
+    -- renewal". Nullable since not all contracts state their Effective Date
+    -- explicitly.
+    effective_date  DATE
 );
 
 CREATE TABLE obligations (

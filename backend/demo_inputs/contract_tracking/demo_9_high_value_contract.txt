@@ -1,0 +1,61 @@
+MASTER ENTERPRISE LICENSE AND SERVICES AGREEMENT
+
+This Master Enterprise License and Services Agreement is
+entered into as of 1 January 2026 (the "Effective Date")
+between Stellarcore Technologies Pvt. Ltd. ("Vendor")
+and the Client identified below.
+
+1. License Grant and Term
+Vendor grants Client a non-exclusive enterprise license
+commencing on the Effective Date for a period of thirty-six
+(36) months until 31 December 2028.
+
+2. Renewal Notice
+Either party may elect not to renew by delivering written
+notice at least one hundred and twenty (120) days before
+31 December 2028, meaning by 2 September 2028.
+
+3. Annual License Fee
+Client shall pay the annual license fee within thirty (30)
+days of each anniversary of the Effective Date, with the
+first payment due by 31 January 2026.
+
+4. Quarterly Usage Reports
+Client shall submit a usage compliance report within fifteen
+(15) days of the end of each calendar quarter, with the
+first report due by 15 April 2026.
+
+5. Security Patching
+Client shall apply each critical security patch released by
+Vendor within fourteen (14) days of receiving notification.
+
+6. Support SLA Acknowledgment
+Vendor shall acknowledge all Priority 1 support tickets
+within two (2) hours of submission and provide a resolution
+or workaround within eight (8) hours of acknowledgment.
+
+7. Annual Compliance Audit
+Vendor shall conduct an annual compliance audit of Client's
+usage within sixty (60) days of each anniversary of the
+Effective Date, with the first audit due by 1 March 2027.
+
+8. Data Processing Agreement
+The parties shall execute a Data Processing Agreement within
+thirty (30) days of the Effective Date, by 31 January 2026.
+
+9. Escrow Deposit
+Vendor shall deposit source code into escrow within forty-five
+(45) days of the Effective Date, by 15 February 2026.
+
+10. Termination for Convenience
+Either party may terminate this Agreement for convenience
+upon one hundred and eighty (180) days' prior written notice,
+with effect no earlier than 31 December 2027.
+
+11. Post-Termination Data Return
+Upon termination for any reason, Vendor shall return all
+Client data within thirty (30) days of the termination date.
+
+12. Governing Law
+This Agreement is governed by the laws of the State of
+Delaware, United States of America.

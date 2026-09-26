@@ -26,7 +26,9 @@ Confidence thresholds are environment-configurable (Section 12.2:
 hardcoded, so they can be adjusted without a code change/redeploy.
 """
 
+import json
 import os
+from datetime import date
 
 from app.core.llm_gateway import call_llm
 from app.core.logging_service import log_decision, complete_agent_run, create_escalation
@@ -60,6 +62,12 @@ ACTION_THRESHOLD = float(os.getenv("CONTRACT_TRACKING_ACTION_THRESHOLD", "0.85")
 # discussion: hybrid trigger — LLM judgment first-class, confidence
 # floor as a safety net).
 PRECEDENT_CHECK_THRESHOLD = float(os.getenv("CONTRACT_TRACKING_PRECEDENT_THRESHOLD", "0.6"))
+# Date-clarity confidence penalties (Approach B, Section 12.2 tuning):
+# vague/unresolvable timing reduces effective confidence used for the
+# action gate, since an obligation with no concrete deadline is harder
+# to auto-action. Both are env-configurable for further tuning.
+VAGUE_DATE_CONFIDENCE_PENALTY = float(os.getenv("CONTRACT_TRACKING_VAGUE_DATE_PENALTY", "0.12"))
+EVENT_TRIGGERED_CONFIDENCE_PENALTY = float(os.getenv("CONTRACT_TRACKING_EVENT_TRIGGERED_PENALTY", "0.05"))
 
 
 _EXTRACTION_SYSTEM_PROMPT = """You extract date-bound obligations from a single \
@@ -100,6 +108,113 @@ def _classify_error(exc: Exception) -> str:
     if "connection" in msg or "network" in msg:
         return "LLM service unreachable"
     return "Unexpected error during clause extraction"
+
+
+_DATE_RESOLUTION_SYSTEM_PROMPT = """You are a legal date analyst. Given an
+obligation's timing description and the contract's Effective Date, determine
+whether a concrete calendar deadline can be computed.
+
+You will receive:
+- effective_date: the contract's start date in YYYY-MM-DD format (or null)
+- raw_date_or_condition: the timing description exactly as written in the contract
+- term_months: the contract's duration in months if inferable (or null)
+
+Classify the timing and compute the date if possible.
+
+Respond with ONLY strict JSON, no other text:
+{
+  "obligation_date": "YYYY-MM-DD or null",
+  "date_status": "<one of: computed | vague | event_triggered | no_timing | empty>",
+  "reasoning": "<one short sentence explaining your classification>"
+}
+
+date_status values:
+- computed: you successfully computed a concrete calendar date from the
+  effective_date and the timing description
+- vague: the timing is genuinely ambiguous ("within a reasonable time",
+  "from time to time", "as agreed", "periodically", "in a timely manner",
+  "at the appropriate time", "reasonable advance notice")
+- event_triggered: the date depends on a future event that has not yet
+  occurred ("30 days after invoice", "14 days following written notice of
+  breach", "within 48 hours of discovery", "upon termination")
+- no_timing: the obligation has no temporal component at all (no date,
+  no duration, no condition — just a permanent duty)
+- empty: no timing information was provided
+
+Only return computed if you are genuinely confident in the date.
+When in doubt between computed and vague/event_triggered, choose the
+more conservative status."""
+
+
+def _resolve_obligation_date(
+    raw_date_or_condition: str,
+    effective_date: str | None,
+    key_index: int = 0,
+) -> dict:
+    """
+    Classifies obligation timing and computes an absolute calendar date
+    where possible (Approach 2+3: LLM-based resolution using the
+    Effective Date extracted from the contract itself).
+
+    Returns a dict:
+      {
+        "obligation_date": date | None,
+        "date_status": "computed" | "vague" | "event_triggered" |
+                       "no_timing" | "empty",
+        "reasoning": str,   # one sentence, for escalation reason context
+      }
+
+    The five date_status values drive the escalation reason construction
+    in _process_clause — each produces a different, contextual message
+    rather than a generic "low confidence" fallback.
+
+    Uses the same key_index as the extraction call for this clause,
+    since alternating within a single clause provides no benefit
+    (calls are sequential, not parallel).
+    """
+    if not raw_date_or_condition or not raw_date_or_condition.strip():
+        return {
+            "obligation_date": None,
+            "date_status": "empty",
+            "reasoning": "No timing information was provided.",
+        }
+
+    user_content = json.dumps({
+        "effective_date": effective_date,
+        "raw_date_or_condition": raw_date_or_condition.strip(),
+    })
+
+    try:
+        response = call_llm(
+            messages=[
+                {"role": "system", "content": _DATE_RESOLUTION_SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.0,
+            key_index=key_index,
+        )
+        parsed = json.loads((response.get("content") or "").strip())
+        obligation_date = None
+        raw_od = parsed.get("obligation_date")
+        if raw_od:
+            try:
+                obligation_date = date.fromisoformat(str(raw_od))
+            except (ValueError, TypeError):
+                obligation_date = None
+
+        return {
+            "obligation_date": obligation_date,
+            "date_status": parsed.get("date_status", "vague"),
+            "reasoning": parsed.get("reasoning", ""),
+        }
+    except Exception:
+        # Date resolution is best-effort — never let it break the
+        # main extraction pipeline. Fall back to vague on any error.
+        return {
+            "obligation_date": None,
+            "date_status": "vague",
+            "reasoning": "Date resolution could not be completed.",
+        }
 
 
 def _extract_clause(clause_text: str, extra_context: str | None = None, key_index: int = 0) -> dict:
@@ -150,7 +265,11 @@ def _extract_clause(clause_text: str, extra_context: str | None = None, key_inde
         }
 
 
-def _insert_obligation(contract_id: str, extraction: dict) -> str:
+def _insert_obligation(
+    contract_id: str,
+    extraction: dict,
+    obligation_date: date | None = None,
+) -> str:
     conn = get_connection()
     try:
         with conn.cursor() as cur:
@@ -163,9 +282,7 @@ def _insert_obligation(contract_id: str, extraction: dict) -> str:
                 (
                     contract_id,
                     extraction["description"],
-                    None,  # obligation_date: raw_date_or_condition is often not a
-                           # clean SQL DATE (e.g. "within 90 days of expiry"); left
-                           # for a future date-parsing pass rather than guessed here.
+                    obligation_date,
                     "obligation",
                     extraction["confidence"],
                 ),
@@ -177,13 +294,26 @@ def _insert_obligation(contract_id: str, extraction: dict) -> str:
         conn.close()
 
 
-def _insert_contract(vendor_name: str | None, doc_id: str | None, run_id: str) -> str:
+def _insert_contract(
+    vendor_name: str | None,
+    doc_id: str | None,
+    run_id: str,
+    effective_date: str | None = None,
+) -> str:
     conn = get_connection()
     try:
         with conn.cursor() as cur:
+            # Parse effective_date string to a Python date if provided
+            ed = None
+            if effective_date:
+                try:
+                    ed = date.fromisoformat(effective_date)
+                except (ValueError, TypeError):
+                    ed = None
             cur.execute(
-                "INSERT INTO contracts (doc_id, vendor_name, run_id) VALUES (%s, %s, %s) RETURNING id;",
-                (doc_id, vendor_name, run_id),
+                """INSERT INTO contracts (doc_id, vendor_name, run_id, effective_date)
+                   VALUES (%s, %s, %s, %s) RETURNING id;""",
+                (doc_id, vendor_name, run_id, ed),
             )
             contract_id = cur.fetchone()["id"]
         conn.commit()
@@ -192,7 +322,7 @@ def _insert_contract(vendor_name: str | None, doc_id: str | None, run_id: str) -
         conn.close()
 
 
-def _process_clause(run_id: str, contract_id: str, clause: dict, clause_index: int = 0) -> dict:
+def _process_clause(run_id: str, contract_id: str, clause: dict, clause_index: int = 0, effective_date: str | None = None) -> dict:
     """
     Handles one clause end to end: extraction, optional cross-
     reference re-extraction, optional precedent check, obligation
@@ -251,10 +381,40 @@ def _process_clause(run_id: str, contract_id: str, clause: dict, clause_index: i
     }
 
     if extraction["has_obligation"]:
-        obligation_id = _insert_obligation(contract_id, extraction)
+        # Resolve obligation date before inserting — best-effort,
+        # never blocks the main extraction pipeline.
+        date_result = _resolve_obligation_date(
+            raw_date_or_condition=extraction["raw_date_or_condition"],
+            effective_date=effective_date,
+            key_index=key_index,
+        )
+        log_decision(run_id, "llm_reasoning", {
+            "clause_number": clause["clause_number"],
+            "date_status": date_result["date_status"],
+            "obligation_date": str(date_result["obligation_date"]) if date_result["obligation_date"] else None,
+            "date_reasoning": date_result["reasoning"],
+        })
+
+        obligation_id = _insert_obligation(
+            contract_id,
+            extraction,
+            obligation_date=date_result["obligation_date"],
+        )
         result["obligation_id"] = obligation_id
 
-        if extraction["confidence"] >= ACTION_THRESHOLD:
+        # Approach B: adjust confidence used for the action gate based
+        # on date clarity. Vague/event-triggered timing makes the
+        # obligation harder to auto-action, so reduce effective
+        # confidence to route these toward human review.
+        date_status = date_result["date_status"]
+        effective_confidence = extraction["confidence"]
+        if date_status == "vague":
+            effective_confidence -= VAGUE_DATE_CONFIDENCE_PENALTY
+        elif date_status == "event_triggered":
+            effective_confidence -= EVENT_TRIGGERED_CONFIDENCE_PENALTY
+        effective_confidence = max(0.0, effective_confidence)
+
+        if effective_confidence >= ACTION_THRESHOLD:
             tool_result = execute_tool(
                 "contract_tracking", "create_calendar_reminder", {"obligation_id": obligation_id}
             )
@@ -267,10 +427,65 @@ def _process_clause(run_id: str, contract_id: str, clause: dict, clause_index: i
             result["action"] = "reminder"
             result["action_detail"] = tool_result
         else:
-            reason = (
-                f"Extraction confidence {extraction['confidence']:.2f} below "
-                f"threshold {ACTION_THRESHOLD:.2f} for clause {clause['clause_number']}."
-            )
+            # Build a contextual, informative escalation reason based on
+            # what type of timing issue was found (generalised for all
+            # obligation types, not just vague ones).
+            raw_timing = extraction["raw_date_or_condition"].strip()
+            description = extraction["description"]
+            confidence = extraction["confidence"]
+            clause_num = clause["clause_number"]
+            # date_status and effective_confidence already computed above
+            computed_date = date_result["obligation_date"]
+
+            if date_status == "computed" and computed_date:
+                reason = (
+                    f"Extraction confidence {extraction['confidence']:.2f} (effective: {effective_confidence:.2f}) below threshold "
+                    f"{ACTION_THRESHOLD:.2f} for clause {clause_num}. "
+                    f"Obligation: '{description}'. "
+                    f"Timing as written: '{raw_timing}' — computed deadline: "
+                    f"{computed_date.isoformat()}. "
+                    f"Reviewer should confirm this date and approve or adjust "
+                    f"the calendar reminder."
+                )
+            elif date_status == "vague":
+                reason = (
+                    f"Extraction confidence {extraction['confidence']:.2f} (effective: {effective_confidence:.2f}) below threshold "
+                    f"{ACTION_THRESHOLD:.2f} for clause {clause_num}. "
+                    f"Obligation: '{description}'. "
+                    f"Timing as written: '{raw_timing}' — vague or unresolvable "
+                    f"(e.g. 'reasonable time', 'from time to time', 'as agreed'). "
+                    f"Reviewer should determine the appropriate deadline."
+                )
+            elif date_status == "event_triggered":
+                reason = (
+                    f"Extraction confidence {extraction['confidence']:.2f} (effective: {effective_confidence:.2f}) below threshold "
+                    f"{ACTION_THRESHOLD:.2f} for clause {clause_num}. "
+                    f"Obligation: '{description}'. "
+                    f"Timing as written: '{raw_timing}' — depends on a future "
+                    f"event that has not yet occurred. "
+                    f"Reviewer should monitor the triggering event and set a "
+                    f"reminder when it happens."
+                )
+            elif date_status == "no_timing":
+                reason = (
+                    f"Extraction confidence {extraction['confidence']:.2f} (effective: {effective_confidence:.2f}) below threshold "
+                    f"{ACTION_THRESHOLD:.2f} for clause {clause_num}. "
+                    f"Obligation: '{description}'. "
+                    f"No temporal component specified — this is a standing duty "
+                    f"with no deadline. "
+                    f"Reviewer should determine when and how to action this "
+                    f"obligation."
+                )
+            else:
+                # empty or fallback
+                reason = (
+                    f"Extraction confidence {extraction['confidence']:.2f} (effective: {effective_confidence:.2f}) below threshold "
+                    f"{ACTION_THRESHOLD:.2f} for clause {clause_num}. "
+                    f"Obligation: '{description}'. "
+                    f"Reviewer should confirm the obligation details and set "
+                    f"an appropriate reminder."
+                )
+
             tool_result = execute_tool(
                 "contract_tracking",
                 "flag_for_manual_review",
@@ -326,10 +541,17 @@ def run_contract_tracking_vertical(agent_input: AgentRunInput) -> AgentRunOutput
         input_document_id=agent_input.input_document_id,
     )
 
-    contract_id = _insert_contract(vendor_name=None, doc_id=doc_id, run_id=run_id)
-
-    clauses = split_contract_into_clauses(contract_text)
-    log_decision(run_id, "retrieval", {"clause_count": len(clauses)})
+    clauses, effective_date = split_contract_into_clauses(contract_text)
+    contract_id = _insert_contract(
+        vendor_name=None,
+        doc_id=doc_id,
+        run_id=run_id,
+        effective_date=effective_date,
+    )
+    log_decision(run_id, "retrieval", {
+        "clause_count": len(clauses),
+        "effective_date": effective_date,
+    })
 
     # Explicit loop, not a list comprehension: if _process_clause
     # raises partway through (e.g. a rate-limited LLM call on clause
@@ -348,7 +570,7 @@ def run_contract_tracking_vertical(agent_input: AgentRunInput) -> AgentRunOutput
     partial_failure = None
     for i, clause in enumerate(clauses):
         try:
-            clause_results.append(_process_clause(run_id, contract_id, clause, clause_index=i))
+            clause_results.append(_process_clause(run_id, contract_id, clause, clause_index=i, effective_date=effective_date))
         except Exception as e:
             unprocessed = [c["clause_number"] for c in clauses[i:]]
             partial_failure = {

@@ -1,0 +1,42 @@
+STRATEGIC ALLIANCE AND REVENUE PARTICIPATION AGREEMENT
+
+This Strategic Alliance and Revenue Participation Agreement
+is entered into between Nexora Capital Group ("Alliance Lead")
+and the co-participant identified below ("Participant").
+
+1. Revenue Participation Mechanics
+The arrangement contemplated herein shall operate on an
+evergreen basis absent an affirmative sunset election by
+either party, with any sunset election to take effect at
+the close of the second full fiscal quarter following the
+quarter in which the electing party's written notification
+is actually received and formally acknowledged.
+
+2. Referral Commission Settlement
+Alliance Lead shall settle each referral commission within
+thirty (30) days of the close of the calendar month in
+which the relevant referred transaction achieves final
+binding execution by all counterparties.
+
+3. Clawback Mechanics
+In the event of a reversed or voided transaction within
+the lookback window, the corresponding commission shall
+be subject to clawback netting against the next commission
+settlement cycle, or separately invoiced if no subsequent
+settlement falls within the clawback resolution period.
+
+4. Alliance Continuance Review
+The parties shall conduct a continuance review at the end
+of each fiscal year to assess whether the strategic
+rationale for the alliance remains sufficient to justify
+continuation on the existing commercial terms or whether
+renegotiation is warranted given prevailing market conditions.
+
+5. Exclusivity Carve-out
+The exclusivity obligations herein shall not apply to
+any engagement that predates this Agreement's execution
+by more than eighteen (18) months or that falls outside
+the defined alliance perimeter as documented in Annex A.
+
+6. Governing Law
+This Agreement is governed by the laws of England and Wales.

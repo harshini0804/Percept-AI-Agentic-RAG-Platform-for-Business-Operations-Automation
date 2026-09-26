@@ -14,14 +14,20 @@ import pytest
 
 from app.core.db import get_connection
 from app.schemas.agent_contract import AgentRunInput, TriggerType
-from app.verticals.contract_tracking.graph import run_contract_tracking_vertical, ACTION_THRESHOLD
+from app.verticals.contract_tracking.graph import (run_contract_tracking_vertical, ACTION_THRESHOLD, _resolve_obligation_date)
 
 
-def _chunk_response(*clauses: tuple[str, str, str]):
-    """clauses: (clause_number, title, text) tuples."""
-    payload = [
-        {"clause_number": c, "title": t, "text": x} for c, t, x in clauses
-    ]
+def _chunk_response(*clauses: tuple[str, str, str], effective_date: str | None = None):
+    """clauses: (clause_number, title, text) tuples.
+    Returns the new object shape {effective_date, clauses} that
+    split_contract_into_clauses now expects from the LLM.
+    """
+    payload = {
+        "effective_date": effective_date,
+        "clauses": [
+            {"clause_number": c, "title": t, "text": x} for c, t, x in clauses
+        ],
+    }
     return lambda **kwargs: {"content": json.dumps(payload), "tool_calls": []}
 
 
@@ -44,17 +50,15 @@ def test_single_confident_obligation_creates_reminder(monkeypatch):
         "app.verticals.contract_tracking.chunking.call_llm",
         _chunk_response(("1", "Renewal", "This agreement renews annually unless notice is given.")),
     )
-    monkeypatch.setattr(
-        "app.verticals.contract_tracking.graph.call_llm",
-        _extraction_sequence({
-            "has_obligation": True,
-            "description": "Give notice to avoid auto-renewal",
-            "raw_date_or_condition": "annually",
-            "references_other_section": "",
-            "unusual_wording": False,
-            "confidence": 0.95,
-        }),
-    )
+    _extr_1 = iter([{"has_obligation": True, "description": "Give notice to avoid auto-renewal",
+        "raw_date_or_condition": "annually", "references_other_section": "",
+        "unusual_wording": False, "confidence": 0.95}])
+    _date_1 = iter([{"obligation_date": "2027-01-01", "date_status": "computed",
+        "reasoning": "annual renewal"}])
+    def _route_1(**kwargs):
+        s = (kwargs.get("messages") or [{}])[0].get("content", "")
+        return {"content": json.dumps(next(_date_1) if "date analyst" in s else next(_extr_1)), "tool_calls": []}
+    monkeypatch.setattr("app.verticals.contract_tracking.graph.call_llm", _route_1)
 
     agent_input = AgentRunInput(
         vertical="contract_tracking",
@@ -134,21 +138,32 @@ def test_mixed_contract_some_reminded_some_escalated_in_same_run(monkeypatch):
             ("2", "Termination", "Ambiguous termination clause."),
         ),
     )
-    monkeypatch.setattr(
-        "app.verticals.contract_tracking.graph.call_llm",
-        _extraction_sequence(
-            {
-                "has_obligation": True, "description": "Renew on time",
-                "raw_date_or_condition": "yearly", "references_other_section": "",
-                "unusual_wording": False, "confidence": 0.9,
-            },
-            {
-                "has_obligation": True, "description": "Unclear termination window",
-                "raw_date_or_condition": "", "references_other_section": "",
-                "unusual_wording": False, "confidence": 0.4,
-            },
-        ),
-    )
+    extraction_responses = iter([
+        {
+            "has_obligation": True, "description": "Renew on time",
+            "raw_date_or_condition": "yearly", "references_other_section": "",
+            "unusual_wording": False, "confidence": 0.9,
+        },
+        {
+            "has_obligation": True, "description": "Unclear termination window",
+            "raw_date_or_condition": "", "references_other_section": "",
+            "unusual_wording": False, "confidence": 0.4,
+        },
+    ])
+    date_responses = iter([
+        # clause 1 has raw_date_or_condition="yearly" -> date resolution fires
+        # Use "computed" so no penalty -> 0.9 stays above 0.85 -> auto-reminds
+        {"obligation_date": "2027-01-01", "date_status": "computed", "reasoning": "Annual renewal"},
+        # clause 2 has empty raw_date_or_condition -> returns early, no LLM call
+    ])
+
+    def fake_graph_llm(**kwargs):
+        system = (kwargs.get("messages") or [{}])[0].get("content", "")
+        if "date analyst" in system:
+            return {"content": json.dumps(next(date_responses)), "tool_calls": []}
+        return {"content": json.dumps(next(extraction_responses)), "tool_calls": []}
+
+    monkeypatch.setattr("app.verticals.contract_tracking.graph.call_llm", fake_graph_llm)
 
     agent_input = AgentRunInput(
         vertical="contract_tracking",
@@ -221,23 +236,30 @@ def test_cross_reference_triggers_get_surrounding_clauses_and_reextraction(monke
         ),
     )
 
-    responses = iter([
-        # Clause 1 extraction (no obligation itself, it's a definition)
+    _extr_cross = iter([
+        # Clause 1 extraction (no obligation, it's a definition)
         {"has_obligation": False, "description": "", "raw_date_or_condition": "",
          "references_other_section": "", "unusual_wording": False, "confidence": 1.0},
-        # Clause 2 first extraction: flags the cross-reference, low initial confidence
+        # Clause 2 first extraction: flags the cross-reference
         {"has_obligation": True, "description": "Termination requires notice",
          "raw_date_or_condition": "", "references_other_section": "1",
          "unusual_wording": False, "confidence": 0.5},
-        # Clause 2 RE-extraction after get_surrounding_clauses resolves "1" -> higher confidence
+        # Clause 2 RE-extraction after cross-reference resolved
         {"has_obligation": True, "description": "Termination requires 30 days notice",
          "raw_date_or_condition": "30 days", "references_other_section": "1",
          "unusual_wording": False, "confidence": 0.92},
     ])
+    # Date resolution: event_triggered (0.92 - 0.05 = 0.87 >= 0.85 -> still reminds)
+    _date_cross = iter([
+        {"obligation_date": None, "date_status": "event_triggered",
+         "reasoning": "30 days from unspecified trigger"},
+    ])
 
     def fake_call_llm(**kwargs):
-        parsed = next(responses)
-        return {"content": json.dumps(parsed), "tool_calls": []}
+        s = (kwargs.get("messages") or [{}])[0].get("content", "")
+        if "date analyst" in s:
+            return {"content": json.dumps(next(_date_cross)), "tool_calls": []}
+        return {"content": json.dumps(next(_extr_cross)), "tool_calls": []}
 
     monkeypatch.setattr("app.verticals.contract_tracking.graph.call_llm", fake_call_llm)
 
@@ -380,19 +402,27 @@ def test_mid_contract_failure_closes_out_run_as_escalated_not_stuck_running(monk
         ),
     )
 
-    call_count = {"n": 0}
-
+    extraction_count = {"n": 0}
     def fake_call_llm(**kwargs):
-        call_count["n"] += 1
-        if call_count["n"] <= 2:
-            responses = [
-                {
-                    "has_obligation": True, "description": f"Obligation {call_count['n']}",
-                    "raw_date_or_condition": "30 days", "references_other_section": "",
-                    "unusual_wording": False, "confidence": 0.95,
-                },
-            ]
-            return {"content": json.dumps(responses[0]), "tool_calls": []}
+        system = (kwargs.get("messages") or [{}])[0].get("content", "")
+        if "date analyst" in system:
+            # Return computed so no penalty — we want the 2 successful
+            # clauses to auto-remind, not escalate due to vague date penalty.
+            return {"content": json.dumps(
+                {"obligation_date": "2027-01-01", "date_status": "computed",
+                 "reasoning": "30 days from effective date"}
+            ), "tool_calls": []}
+        # Extraction call
+        extraction_count["n"] += 1
+        if extraction_count["n"] <= 2:
+            return {"content": json.dumps({
+                "has_obligation": True,
+                "description": f"Obligation {extraction_count['n']}",
+                "raw_date_or_condition": "30 days",
+                "references_other_section": "",
+                "unusual_wording": False,
+                "confidence": 0.95,
+            }), "tool_calls": []}
         raise RuntimeError("Error code: 429 - rate_limit_exceeded")
 
     monkeypatch.setattr("app.verticals.contract_tracking.graph.call_llm", fake_call_llm)
@@ -440,3 +470,322 @@ def test_mid_contract_failure_closes_out_run_as_escalated_not_stuck_running(monk
     # details (org IDs, billing URLs) are never stored in escalation reason.
     assert "rate limit" in escalation_row["reason"].lower() or "temporarily unavailable" in escalation_row["reason"].lower()
 
+
+
+# ---------------------------------------------------------------
+# _resolve_obligation_date tests — five date_status branches
+# ---------------------------------------------------------------
+
+def _fake_date_llm(obligation_date, date_status, reasoning="test"):
+    """Returns a fake call_llm that responds with the given date resolution."""
+    import json as _json
+    payload = {
+        "obligation_date": obligation_date,
+        "date_status": date_status,
+        "reasoning": reasoning,
+    }
+    return lambda **kwargs: {"content": _json.dumps(payload), "tool_calls": []}
+
+
+def test_resolve_obligation_date_empty_input_returns_empty_status(monkeypatch):
+    """Empty raw_date_or_condition returns empty status without an LLM call."""
+    called = []
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.graph.call_llm",
+        lambda **kwargs: called.append(True) or {"content": "{}", "tool_calls": []},
+    )
+
+    result = _resolve_obligation_date("", effective_date="2026-01-15")
+
+    assert result["date_status"] == "empty"
+    assert result["obligation_date"] is None
+    assert called == []  # no LLM call made
+
+
+def test_resolve_obligation_date_computed_returns_date_object(monkeypatch):
+    """When LLM returns a computed date, it's parsed into a date object."""
+    from datetime import date as _date
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.graph.call_llm",
+        _fake_date_llm("2026-11-16", "computed", "60 days before annual renewal"),
+    )
+
+    result = _resolve_obligation_date(
+        "at least 60 days before the renewal date",
+        effective_date="2026-01-15",
+    )
+
+    assert result["date_status"] == "computed"
+    assert result["obligation_date"] == _date(2026, 11, 16)
+
+
+def test_resolve_obligation_date_vague_returns_none(monkeypatch):
+    """Vague timing returns None for obligation_date."""
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.graph.call_llm",
+        _fake_date_llm(None, "vague", "No concrete deadline possible"),
+    )
+
+    result = _resolve_obligation_date(
+        "within a reasonable time",
+        effective_date="2026-01-15",
+    )
+
+    assert result["date_status"] == "vague"
+    assert result["obligation_date"] is None
+
+
+def test_resolve_obligation_date_event_triggered_returns_none(monkeypatch):
+    """Event-triggered timing returns None for obligation_date."""
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.graph.call_llm",
+        _fake_date_llm(None, "event_triggered", "Depends on invoice date"),
+    )
+
+    result = _resolve_obligation_date(
+        "within 30 days of the invoice date",
+        effective_date="2026-01-15",
+    )
+
+    assert result["date_status"] == "event_triggered"
+    assert result["obligation_date"] is None
+
+
+def test_resolve_obligation_date_no_timing_returns_none(monkeypatch):
+    """No temporal component returns no_timing status."""
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.graph.call_llm",
+        _fake_date_llm(None, "no_timing", "Standing duty with no deadline"),
+    )
+
+    result = _resolve_obligation_date(
+        "Supplier shall maintain adequate insurance coverage",
+        effective_date="2026-01-15",
+    )
+
+    assert result["date_status"] == "no_timing"
+    assert result["obligation_date"] is None
+
+
+def test_resolve_obligation_date_falls_back_gracefully_on_llm_error(monkeypatch):
+    """LLM error during date resolution never breaks the pipeline."""
+    def _raising_llm(**kwargs):
+        raise RuntimeError("Simulated LLM failure")
+
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.graph.call_llm",
+        _raising_llm,
+    )
+
+    result = _resolve_obligation_date(
+        "within 60 days of the renewal date",
+        effective_date="2026-01-15",
+    )
+
+    # Falls back gracefully — never raises
+    assert result["date_status"] == "vague"
+    assert result["obligation_date"] is None
+
+
+def test_escalation_reason_contains_raw_timing_text(monkeypatch):
+    """
+    When an obligation is escalated, the reason contains the raw timing
+    text from the contract — not just the generic confidence message.
+    This is the key difference from the old behaviour.
+    """
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.chunking.call_llm",
+        _chunk_response(
+            ("1", "Payment", "Client shall pay within a reasonable time."),
+            effective_date="2026-01-15",
+        ),
+    )
+
+    # Extraction: low confidence, has obligation, vague timing
+    extraction_responses = iter([
+        {
+            "has_obligation": True,
+            "description": "Client shall pay",
+            "raw_date_or_condition": "within a reasonable time",
+            "references_other_section": "",
+            "unusual_wording": False,
+            "confidence": 0.72,
+        },
+    ])
+
+    # Date resolution: vague
+    date_responses = iter([
+        {"obligation_date": None, "date_status": "vague", "reasoning": "No concrete date"},
+    ])
+
+    def fake_call_llm(**kwargs):
+        import json as _json
+        system = kwargs.get("messages", [{}])[0].get("content", "")
+        if "date analyst" in system:
+            return {"content": _json.dumps(next(date_responses)), "tool_calls": []}
+        return {"content": _json.dumps(next(extraction_responses)), "tool_calls": []}
+
+    monkeypatch.setattr("app.verticals.contract_tracking.graph.call_llm", fake_call_llm)
+
+    agent_input = AgentRunInput(
+        vertical="contract_tracking",
+        trigger_type=TriggerType.UPLOAD,
+        input_payload={"text": "1. Payment. Client shall pay within a reasonable time."},
+    )
+    output = run_contract_tracking_vertical(agent_input)
+
+    assert output.escalated is True
+    # The reason must contain the raw timing text, not just the confidence number
+    assert output.escalation_reason is not None
+    assert "reasonable time" in output.escalation_reason.lower()
+    assert "vague" in output.escalation_reason.lower()
+
+
+def test_vague_date_penalty_causes_escalation_despite_high_raw_confidence(monkeypatch):
+    """
+    Approach B: an obligation with high raw extraction confidence (0.92)
+    but vague timing gets penalised by VAGUE_DATE_CONFIDENCE_PENALTY (0.12),
+    giving effective_confidence = 0.80 < ACTION_THRESHOLD (0.85) -> escalated.
+    Without the penalty it would have auto-reminded.
+    """
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.chunking.call_llm",
+        _chunk_response(
+            ("1", "Deliverable", "Advisor shall submit within a reasonable time."),
+            effective_date=None,
+        ),
+    )
+
+    extraction_responses = iter([{
+        "has_obligation": True,
+        "description": "Submit deliverables",
+        "raw_date_or_condition": "within a reasonable time",
+        "references_other_section": "",
+        "unusual_wording": False,
+        "confidence": 0.92,  # above threshold raw, below after penalty
+    }])
+    date_responses = iter([{
+        "obligation_date": None,
+        "date_status": "vague",
+        "reasoning": "No concrete deadline possible",
+    }])
+
+    def fake_call_llm(**kwargs):
+        system = (kwargs.get("messages") or [{}])[0].get("content", "")
+        if "date analyst" in system:
+            return {"content": json.dumps(next(date_responses)), "tool_calls": []}
+        return {"content": json.dumps(next(extraction_responses)), "tool_calls": []}
+
+    monkeypatch.setattr("app.verticals.contract_tracking.graph.call_llm", fake_call_llm)
+
+    agent_input = AgentRunInput(
+        vertical="contract_tracking",
+        trigger_type=TriggerType.UPLOAD,
+        input_payload={"text": "1. Deliverable. Advisor shall submit within a reasonable time."},
+    )
+    output = run_contract_tracking_vertical(agent_input)
+
+    # 0.92 - 0.12 = 0.80 < 0.85 -> must escalate
+    assert output.escalated is True
+    assert output.escalation_reason is not None
+    # Reason shows both raw and effective confidence
+    assert "0.92" in output.escalation_reason
+    assert "0.80" in output.escalation_reason
+    assert "vague" in output.escalation_reason.lower()
+
+
+def test_event_triggered_penalty_causes_escalation(monkeypatch):
+    """
+    EVENT_TRIGGERED_CONFIDENCE_PENALTY (0.05) applied to an obligation
+    with raw confidence 0.88 gives effective 0.83 < 0.85 -> escalated.
+    """
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.chunking.call_llm",
+        _chunk_response(
+            ("1", "Payment", "Client shall pay within 30 days of invoice."),
+            effective_date=None,
+        ),
+    )
+
+    extraction_responses = iter([{
+        "has_obligation": True,
+        "description": "Pay within 30 days of invoice",
+        "raw_date_or_condition": "within 30 days of invoice date",
+        "references_other_section": "",
+        "unusual_wording": False,
+        "confidence": 0.88,
+    }])
+    date_responses = iter([{
+        "obligation_date": None,
+        "date_status": "event_triggered",
+        "reasoning": "Depends on invoice date",
+    }])
+
+    def fake_call_llm(**kwargs):
+        system = (kwargs.get("messages") or [{}])[0].get("content", "")
+        if "date analyst" in system:
+            return {"content": json.dumps(next(date_responses)), "tool_calls": []}
+        return {"content": json.dumps(next(extraction_responses)), "tool_calls": []}
+
+    monkeypatch.setattr("app.verticals.contract_tracking.graph.call_llm", fake_call_llm)
+
+    agent_input = AgentRunInput(
+        vertical="contract_tracking",
+        trigger_type=TriggerType.UPLOAD,
+        input_payload={"text": "1. Payment. Client shall pay within 30 days of invoice."},
+    )
+    output = run_contract_tracking_vertical(agent_input)
+
+    # 0.88 - 0.05 = 0.83 < 0.85 -> must escalate
+    assert output.escalated is True
+    assert output.escalation_reason is not None
+    assert "event" in output.escalation_reason.lower() or "future event" in output.escalation_reason.lower()
+
+
+def test_computed_date_no_penalty_auto_reminds(monkeypatch):
+    """
+    No penalty for computed dates — obligation with raw confidence 0.90
+    and a successfully computed date still auto-reminds.
+    """
+    from datetime import date as _date
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.chunking.call_llm",
+        _chunk_response(
+            ("1", "Renewal", "Give 60 days notice before renewal."),
+            effective_date="2026-01-15",
+        ),
+    )
+
+    extraction_responses = iter([{
+        "has_obligation": True,
+        "description": "Give 60 days notice before renewal",
+        "raw_date_or_condition": "60 days before renewal date",
+        "references_other_section": "",
+        "unusual_wording": False,
+        "confidence": 0.90,
+    }])
+    date_responses = iter([{
+        "obligation_date": "2026-11-16",
+        "date_status": "computed",
+        "reasoning": "60 days before annual renewal on 2027-01-15",
+    }])
+
+    def fake_call_llm(**kwargs):
+        system = (kwargs.get("messages") or [{}])[0].get("content", "")
+        if "date analyst" in system:
+            return {"content": json.dumps(next(date_responses)), "tool_calls": []}
+        return {"content": json.dumps(next(extraction_responses)), "tool_calls": []}
+
+    monkeypatch.setattr("app.verticals.contract_tracking.graph.call_llm", fake_call_llm)
+
+    agent_input = AgentRunInput(
+        vertical="contract_tracking",
+        trigger_type=TriggerType.UPLOAD,
+        input_payload={"text": "1. Renewal. Give 60 days notice before renewal."},
+    )
+    output = run_contract_tracking_vertical(agent_input)
+
+    # 0.90, no penalty (computed) -> auto-reminds
+    assert output.escalated is False
+    assert len(output.actions_taken) == 1
+    assert output.actions_taken[0].action_name == "create_calendar_reminder"

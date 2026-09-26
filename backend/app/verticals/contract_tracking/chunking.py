@@ -1,5 +1,5 @@
 """
-Contract Obligation & Renewal Tracking Agent — Clause Chunking
+Contract Obligation & Renewal Tracking Agent -- Clause Chunking
 (Vertical 3, Section 8.3: "KB holds contract clauses chunked at
 clause level (not by section or whole document)").
 
@@ -24,39 +24,52 @@ import json
 
 from app.core.llm_gateway import call_llm
 
-_SYSTEM_PROMPT = """You split contract text into individual clauses.
+_SYSTEM_PROMPT = """You split contract text into individual clauses and
+extract the contract's Effective Date.
 
-A clause is a single distinct obligation, right, or provision — \
-typically (but not always) marked by a number or heading in the \
-source text. Preserve the original wording of each clause exactly; \
+A clause is a single distinct obligation, right, or provision --
+typically (but not always) marked by a number or heading in the
+source text. Preserve the original wording of each clause exactly;
 do not summarize or rewrite it.
 
-Respond with ONLY a JSON array, no other text, in this exact shape:
-[
-  {"clause_number": "1", "title": "Term and Termination", "text": "..."},
-  {"clause_number": "2", "title": "Confidentiality", "text": "..."}
-]
+Respond with ONLY a JSON object, no other text, in this exact shape:
+{
+  "effective_date": "YYYY-MM-DD or null if not stated in the contract",
+  "clauses": [
+    {"clause_number": "1", "title": "Term and Termination", "text": "..."},
+    {"clause_number": "2", "title": "Confidentiality", "text": "..."}
+  ]
+}
 
-If the source text has no explicit numbering, assign sequential \
-clause_number values ("1", "2", "3", ...) yourself based on \
-paragraph/topic boundaries. If a clause has no clear title, use a \
-short title you infer from its content. Every word of the original \
-text should end up in exactly one clause — do not skip or duplicate \
+For effective_date: look for phrases like "Effective Date", "dated as of",
+"commencing on", "as of [date]" in the contract. If a concrete calendar
+date is stated, return it in YYYY-MM-DD format. If no date is stated or
+it is ambiguous, return null.
+
+If the source text has no explicit numbering, assign sequential
+clause_number values ("1", "2", "3", ...) yourself based on
+paragraph/topic boundaries. If a clause has no clear title, use a
+short title you infer from its content. Every word of the original
+text should end up in exactly one clause -- do not skip or duplicate
 content."""
 
 
-def split_contract_into_clauses(text: str) -> list[dict]:
+def split_contract_into_clauses(text: str) -> tuple[list[dict], str | None]:
     """
     Splits raw contract text into clauses via a single LLM call.
+    Also extracts the contract's Effective Date from the text itself
+    (Approach 3: extract from contract rather than require user input).
 
-    Returns a list of dicts: [{"clause_number": str, "title": str,
-    "text": str}, ...], in document order.
+    Returns a tuple: (clauses, effective_date) where:
+    - clauses: list of dicts [{clause_number, title, text}, ...] in
+      document order
+    - effective_date: ISO date string "YYYY-MM-DD" if found in the
+      contract text, or None if not stated
 
-    Raises ValueError if the LLM response isn't valid JSON in the
-    expected shape — this is treated as a hard failure rather than a
+    Raises ValueError if the LLM response is not valid JSON in the
+    expected shape -- this is treated as a hard failure rather than a
     silent fallback, since a mis-chunked contract would corrupt every
-    downstream extraction and cross-reference lookup for that
-    document.
+    downstream extraction and cross-reference lookup for that document.
     """
     response = call_llm(
         messages=[
@@ -70,19 +83,32 @@ def split_contract_into_clauses(text: str) -> list[dict]:
     raw = _strip_code_fences(raw)
 
     try:
-        clauses = json.loads(raw)
+        parsed = json.loads(raw)
     except json.JSONDecodeError as e:
         raise ValueError(
             f"Clause chunker returned invalid JSON: {e}\nRaw response: {raw[:500]}"
         ) from e
 
-    if not isinstance(clauses, list) or not clauses:
+    # Support both old list shape (backward compat for existing tests
+    # that mock the chunker returning a bare array) and new object shape.
+    if isinstance(parsed, list):
+        clauses_raw = parsed
+        effective_date = None
+    elif isinstance(parsed, dict):
+        clauses_raw = parsed.get("clauses", [])
+        effective_date = parsed.get("effective_date") or None
+    else:
         raise ValueError(
-            f"Clause chunker expected a non-empty JSON array, got: {raw[:500]}"
+            f"Clause chunker expected a JSON array or object, got: {raw[:500]}"
+        )
+
+    if not isinstance(clauses_raw, list) or not clauses_raw:
+        raise ValueError(
+            f"Clause chunker expected a non-empty clauses array, got: {raw[:500]}"
         )
 
     normalized = []
-    for i, clause in enumerate(clauses):
+    for i, clause in enumerate(clauses_raw):
         if not isinstance(clause, dict) or "text" not in clause:
             raise ValueError(f"Clause {i} missing required 'text' field: {clause}")
         normalized.append(
@@ -93,7 +119,7 @@ def split_contract_into_clauses(text: str) -> list[dict]:
             }
         )
 
-    return normalized
+    return normalized, effective_date
 
 
 def _strip_code_fences(raw: str) -> str:

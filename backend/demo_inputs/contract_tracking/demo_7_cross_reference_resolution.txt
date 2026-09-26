@@ -1,0 +1,40 @@
+SOFTWARE DEVELOPMENT AND LICENSING AGREEMENT
+
+This Software Development and Licensing Agreement is entered
+into as of 15 March 2026 (the "Effective Date") between
+Praxis Software Labs Inc. ("Developer") and Client below.
+
+1. Definitions
+"Delivery Schedule" means the milestone dates set out in
+Exhibit A attached hereto, as may be amended by written
+agreement. "Warranty Period" means ninety (90) days
+following each Delivery Milestone.
+
+2. Development Milestones
+Developer shall complete each milestone in accordance with
+the Delivery Schedule defined in Section 1 and shall notify
+Client in writing upon completion of each milestone.
+
+3. Warranty and Bug Fixes
+During the Warranty Period as defined in Section 1,
+Developer shall remedy any material defect in the delivered
+software within fourteen (14) days of receiving written
+notice from Client.
+
+4. Payment Terms
+Client shall pay each invoice within twenty-one (21) days
+of the invoice date. Late payments shall accrue interest
+at 1.5% per month from the due date.
+
+5. Source Code Escrow
+Developer shall deposit a complete copy of the source code
+into escrow within thirty (30) days of the Effective Date,
+being by 14 April 2026.
+
+6. Maintenance Term
+Following the Warranty Period referenced in Section 1,
+Developer shall provide standard maintenance services for
+twelve (12) months at the rates set out in Exhibit B.
+
+7. Governing Law
+This Agreement is governed by the laws of California.

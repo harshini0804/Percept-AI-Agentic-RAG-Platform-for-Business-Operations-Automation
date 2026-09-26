@@ -26,7 +26,7 @@ def test_split_contract_into_clauses_happy_path(monkeypatch):
         "app.verticals.contract_tracking.chunking.call_llm", _fake_llm(fake_response)
     )
 
-    clauses = split_contract_into_clauses("some raw contract text")
+    clauses, _ = split_contract_into_clauses("some raw contract text")
 
     assert len(clauses) == 2
     assert clauses[0] == {
@@ -43,7 +43,7 @@ def test_split_contract_into_clauses_strips_code_fences(monkeypatch):
         "app.verticals.contract_tracking.chunking.call_llm", _fake_llm(fenced)
     )
 
-    clauses = split_contract_into_clauses("text")
+    clauses, _ = split_contract_into_clauses("text")
 
     assert clauses == [{"clause_number": "1", "title": "T", "text": "X"}]
 
@@ -56,7 +56,7 @@ def test_split_contract_into_clauses_defaults_missing_clause_number(monkeypatch)
         "app.verticals.contract_tracking.chunking.call_llm", _fake_llm(fake_response)
     )
 
-    clauses = split_contract_into_clauses("text")
+    clauses, _ = split_contract_into_clauses("text")
 
     assert clauses[0]["clause_number"] == "1"
 
@@ -98,3 +98,53 @@ def test_split_contract_into_clauses_raises_on_non_list_json(monkeypatch):
 
     with pytest.raises(ValueError, match="non-empty"):
         split_contract_into_clauses("text")
+
+
+def test_split_returns_effective_date_when_present(monkeypatch):
+    """Chunker returns effective_date from the new object-shaped response."""
+    fake_response = json.dumps({
+        "effective_date": "2026-01-15",
+        "clauses": [
+            {"clause_number": "1", "title": "Term", "text": "This agreement..."},
+        ],
+    })
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.chunking.call_llm", _fake_llm(fake_response)
+    )
+
+    clauses, effective_date = split_contract_into_clauses("some contract text")
+
+    assert len(clauses) == 1
+    assert effective_date == "2026-01-15"
+
+
+def test_split_returns_none_effective_date_when_not_stated(monkeypatch):
+    """effective_date is None when the LLM returns null."""
+    fake_response = json.dumps({
+        "effective_date": None,
+        "clauses": [
+            {"clause_number": "1", "title": "Term", "text": "This agreement..."},
+        ],
+    })
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.chunking.call_llm", _fake_llm(fake_response)
+    )
+
+    clauses, effective_date = split_contract_into_clauses("some contract text")
+
+    assert effective_date is None
+
+
+def test_split_backward_compat_bare_array_response(monkeypatch):
+    """Old-style bare array response still works -- effective_date defaults to None."""
+    fake_response = json.dumps([
+        {"clause_number": "1", "title": "Term", "text": "This agreement..."},
+    ])
+    monkeypatch.setattr(
+        "app.verticals.contract_tracking.chunking.call_llm", _fake_llm(fake_response)
+    )
+
+    clauses, effective_date = split_contract_into_clauses("some contract text")
+
+    assert len(clauses) == 1
+    assert effective_date is None

@@ -1,0 +1,35 @@
+TECHNOLOGY PARTNERSHIP AGREEMENT
+
+This Technology Partnership Agreement is entered into as of
+1 February 2026 (the "Effective Date") between Axonix
+Technology Partners Ltd. ("Partner A") and the co-partner
+identified below.
+
+1. Initial Term and Renewal
+This Agreement commences on the Effective Date and continues
+for twelve (12) months. It renews automatically for successive
+twelve (12) month periods unless either party delivers written
+notice of non-renewal at least sixty (60) days before the end
+of the then-current term.
+
+2. Quarterly Business Review
+Each party shall prepare and share a business review report
+within fifteen (15) days of the end of each calendar quarter,
+with the first report due by 15 April 2026.
+
+3. Joint Roadmap Submission
+The parties shall jointly submit a technology roadmap to their
+respective steering committees within forty-five (45) days of
+the Effective Date, meaning by 17 March 2026.
+
+4. Data Sharing Protocol
+Partner A shall implement the agreed data sharing protocol
+within thirty (30) days of the Effective Date, by 3 March 2026.
+
+5. Annual Security Review
+Each party shall conduct a joint security review within sixty
+(60) days of each anniversary of the Effective Date, with the
+first review due by 1 April 2027.
+
+6. Governing Law
+This Agreement is governed by the laws of the State of Delaware.

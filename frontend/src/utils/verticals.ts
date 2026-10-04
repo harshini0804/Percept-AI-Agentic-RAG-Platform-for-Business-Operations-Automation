@@ -13,3 +13,9 @@ export const VERTICAL_LABELS: Record<string, string> = {
 export function getVerticalLabel(vertical: string): string {
   return VERTICAL_LABELS[vertical] ?? vertical;
 }
+
+const CODE_TRIGGERED_TOOL_VERTICALS = new Set<string>(["meeting_action_items"]);
+
+export function usesCodeTriggeredTools(vertical: string): boolean {
+  return CODE_TRIGGERED_TOOL_VERTICALS.has(vertical);
+}

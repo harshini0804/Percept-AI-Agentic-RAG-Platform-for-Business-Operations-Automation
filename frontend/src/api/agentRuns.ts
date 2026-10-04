@@ -54,7 +54,7 @@ export interface AgentRunStats {
 export interface SubmissionResponse {
   run_id: string;
   status: string;
-  confidence: number;
+  confidence: number | null;
   escalated: boolean;
 }
 

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getEvaluationMetrics } from "../api/evaluation";
-import { getVerticalLabel } from "../utils/verticals";
+import { getVerticalLabel, usesCodeTriggeredTools } from "../utils/verticals";
 
 function pct(value: number): string {
   return `${(value * 100).toFixed(0)}%`;
@@ -86,7 +86,18 @@ function Evaluation() {
                     : "—"}
                 </td>
                 <td className="py-2 pr-4">{pct(m.retrieval_retry_rate)}</td>
-                <td className="py-2 pr-4">{m.tool_calls_per_run.toFixed(2)}</td>
+                                <td className="py-2 pr-4">
+                  {usesCodeTriggeredTools(m.vertical) ? (
+                    <span
+                      title="This vertical's tools are triggered by code, not chosen by the model, so this metric does not apply."
+                      className="cursor-help"
+                    >
+                      —
+                    </span>
+                  ) : (
+                    m.tool_calls_per_run.toFixed(2)
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

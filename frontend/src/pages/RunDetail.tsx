@@ -8,6 +8,7 @@ import { getVerticalLabel } from "../utils/verticals";
 import { formatRunMeta } from "../utils/formatDate";
 import { formatConfidence, describeRetrievalScore } from "../utils/formatScore";
 import { prettifySnakeCase, tryParseJsonObject } from "../utils/formatDecision";
+import { describeActionsTaken } from "../utils/formatOutcome";
 import { DecisionBulletList } from "../components/DecisionBullets";
 import { RetrievedResultsList, type RetrievedResult } from "../components/RetrievedResultsList";
 
@@ -116,6 +117,30 @@ function OriginalDocumentPanel({ documentId }: { documentId: string }) {
   );
 }
 
+// Shown in place of a confidence percentage for runs that report none
+// (e.g. extraction runs) — what the run actually did is more useful there.
+function OutcomeBadge({ text }: { text: string }) {
+  return (
+    <span className="px-2 py-1 rounded text-sm font-medium bg-blue-100 text-blue-800">{text}</span>
+  );
+}
+
+// One action's details. Follow-up style actions nest their data under
+// "result"; create-style actions carry their fields directly.
+function ActionBlock({ detail }: { detail: Record<string, unknown> | null | undefined }) {
+  const { action_name, result, ...rest } = (detail ?? {}) as Record<string, unknown>;
+  const body = (result && typeof result === "object" ? result : rest) as Record<string, unknown>;
+
+  return (
+    <div>
+      <p className="text-sm text-slate-700 mb-2">
+        <span className="font-medium">{prettifySnakeCase(action_name as string | undefined)}</span>
+      </p>
+      <DecisionBulletList detail={body} />
+    </div>
+  );
+}
+
 function RunDetail() {
   const { runId } = useParams<{ runId: string }>();
 
@@ -131,7 +156,7 @@ function RunDetail() {
 
   const retrievalStep = run.decisions.find((d) => d.step_type === "retrieval");
   const reasoningStep = run.decisions.find((d) => d.step_type === "llm_reasoning");
-  const actionStep = run.decisions.find((d) => d.step_type === "action");
+  const actionSteps = run.decisions.filter((d) => d.step_type === "action");
   const escalationStep = run.decisions.find((d) => d.step_type === "escalation");
 
   return (
@@ -153,7 +178,13 @@ function RunDetail() {
           </div>
           <div className="flex gap-2 items-center">
             <StatusBadge status={run.status} />
-            <ConfidenceBadge confidence={run.confidence} />
+            {run.confidence !== null ? (
+              <ConfidenceBadge confidence={run.confidence} />
+            ) : run.status === "completed" ? (
+              <OutcomeBadge
+                text={describeActionsTaken(actionSteps.map((a) => String(a.detail?.action_name ?? "")))}
+              />
+            ) : null}
           </div>
         </div>
       </div>
@@ -208,16 +239,19 @@ function RunDetail() {
         </div>
       )}
 
-      {/* Action-taken panel */}
-      {actionStep && (
+      {/* Action-taken panel — every action the run took, not just the first */}
+      {actionSteps.length > 0 && (
         <div className="bg-white rounded shadow p-6 mb-4 border-l-4 border-green-500">
-          <h3 className="font-medium mb-2">Action Taken</h3>
-          <p className="text-sm text-slate-700 mb-2">
-            <span className="font-medium">
-              {prettifySnakeCase(actionStep.detail?.action_name as string | undefined)}
-            </span>
-          </p>
-          <DecisionBulletList detail={actionStep.detail?.result as Record<string, unknown>} />
+          <h3 className="font-medium mb-3">
+            {actionSteps.length === 1 ? "Action Taken" : `Actions Taken (${actionSteps.length})`}
+          </h3>
+          <div className="space-y-4 divide-y divide-slate-100">
+            {actionSteps.map((step) => (
+              <div key={step.id} className="pt-4 first:pt-0">
+                <ActionBlock detail={step.detail} />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -58,21 +58,28 @@ def test_extract_candidate_items_happy_path(monkeypatch):
     ]
 
 
-def test_extract_candidate_items_returns_empty_list_for_malformed_json(monkeypatch):
-    """Fails SAFE — malformed LLM output must not crash the run."""
+def test_extract_candidate_items_raises_for_malformed_json(monkeypatch):
+    """Unreadable output is a FAILURE, not "nothing found" — the caller
+    escalates it instead of reporting a successful empty run."""
+    from app.verticals.meeting_action_items.graph import ExtractionOutputError
+
     monkeypatch.setattr(
         "app.verticals.meeting_action_items.graph.call_llm",
         lambda messages: {"content": "not valid json", "tool_calls": []},
     )
-    assert _extract_candidate_items("transcript") == []
+    with pytest.raises(ExtractionOutputError):
+        _extract_candidate_items("transcript")
 
 
-def test_extract_candidate_items_returns_empty_list_for_non_list_json(monkeypatch):
+def test_extract_candidate_items_raises_for_non_list_json(monkeypatch):
+    from app.verticals.meeting_action_items.graph import ExtractionOutputError
+
     monkeypatch.setattr(
         "app.verticals.meeting_action_items.graph.call_llm",
         lambda messages: {"content": '{"not": "a list"}', "tool_calls": []},
     )
-    assert _extract_candidate_items("transcript") == []
+    with pytest.raises(ExtractionOutputError):
+        _extract_candidate_items("transcript")
 
 
 def test_extract_candidate_items_filters_out_malformed_entries(monkeypatch):
@@ -258,7 +265,7 @@ def test_run_meeting_action_items_creates_items_and_persists_embeddings(monkeypa
     output = run_meeting_action_items(agent_input)
 
     assert output.status == "completed"
-    assert output.confidence == 1.0
+    assert output.confidence is None
     assert output.escalated is False
     assert len(output.actions_taken) == 2
     assert {a.action_name for a in output.actions_taken} == {"create_action_item"}
@@ -418,10 +425,13 @@ def test_run_meeting_action_items_logs_top_score_for_recurrence_check(monkeypatc
 
 
 def test_run_meeting_action_items_resolves_input_document_id(monkeypatch):
-    monkeypatch.setattr(
-        "app.verticals.meeting_action_items.graph.call_llm",
-        lambda messages: {"content": "[]", "tool_calls": []},
-    )
+    sent_to_model = {}
+
+    def fake_call_llm(messages):
+        sent_to_model["user_text"] = messages[1]["content"]
+        return {"content": "[]", "tool_calls": []}
+
+    monkeypatch.setattr("app.verticals.meeting_action_items.graph.call_llm", fake_call_llm)
 
     document_id = create_document(
         vertical="meeting_action_items",
@@ -435,11 +445,14 @@ def test_run_meeting_action_items_resolves_input_document_id(monkeypatch):
     )
     output = run_meeting_action_items(agent_input)
 
-    assert output.status == "completed"
+    # The stored document's text is what reaches the model...
+    assert sent_to_model["user_text"] == "A transcript with no action items."
+    # ...and a document with no action items is escalated, not "completed".
+    assert output.status == "escalated"
     assert output.actions_taken == []
 
 
-def test_run_meeting_action_items_malformed_llm_output_completes_with_no_items(monkeypatch):
+def test_run_meeting_action_items_malformed_llm_output_escalates(monkeypatch):
     monkeypatch.setattr(
         "app.verticals.meeting_action_items.graph.call_llm",
         lambda messages: {"content": "not valid json", "tool_calls": []},
@@ -452,6 +465,7 @@ def test_run_meeting_action_items_malformed_llm_output_completes_with_no_items(m
     )
     output = run_meeting_action_items(agent_input)
 
-    assert output.status == "completed"
+    assert output.status == "escalated"
     assert output.actions_taken == []
-    assert output.escalated is False
+    assert output.escalated is True
+    assert "could not be read" in output.escalation_reason

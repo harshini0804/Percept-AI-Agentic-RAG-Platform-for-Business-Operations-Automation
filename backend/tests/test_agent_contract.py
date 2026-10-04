@@ -103,6 +103,23 @@ def test_agent_run_output_rejects_confidence_out_of_range():
     with pytest.raises(ValidationError):
         AgentRunOutput(run_id="r1", status="completed", confidence=1.5, escalated=False)
 
+def test_agent_run_output_accepts_null_confidence():
+    """Some runs (e.g. meeting_action_items' extraction runs) have no
+    meaningful confidence to report — None is allowed, but it must still
+    be stated explicitly rather than silently omitted."""
+    output = AgentRunOutput(run_id="r1", status="completed", confidence=None, escalated=False)
+    assert output.confidence is None
+
+
+def test_agent_run_output_requires_confidence_to_be_stated():
+    with pytest.raises(ValidationError):
+        AgentRunOutput(run_id="r1", status="completed", escalated=False)
+
+
+def test_agent_run_output_still_rejects_out_of_range_when_set():
+    with pytest.raises(ValidationError):
+        AgentRunOutput(run_id="r1", status="completed", confidence=-0.1, escalated=False)
+
 
 def test_agent_run_output_defaults_actions_taken_to_empty_list():
     output = AgentRunOutput(run_id="r1", status="completed", confidence=0.9, escalated=False)

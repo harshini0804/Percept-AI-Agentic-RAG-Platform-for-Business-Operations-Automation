@@ -9,8 +9,10 @@ const STATUS_OPTIONS = [
   { value: "resolved", label: "Resolved" },
 ];
 
-function formatDeadline(deadline: string | null): string {
-  if (!deadline) return "No deadline";
+function formatDeadline(deadline: string | null, status: string): string {
+  // Follow-up only ever looks at items that have a deadline, so an open
+  // item without one is never chased — say so instead of implying it is tracked.
+  if (!deadline) return status === "open" ? "No deadline — not monitored" : "No deadline";
   const isOverdue = new Date(deadline) < new Date(new Date().toDateString());
   return isOverdue ? `${deadline} (overdue)` : deadline;
 }
@@ -98,8 +100,7 @@ function Tracker() {
                 </div>
                 <p className="text-sm text-slate-700">{item.description}</p>
                 <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
-                  <span>Deadline: {formatDeadline(item.deadline)}</span>
-                  <span>·</span>
+                  <span>Deadline: {formatDeadline(item.deadline, item.status)}</span>                  <span>·</span>
                   <span>Nudges: {item.nudge_count}</span>
                   <span>·</span>
                   <span>Created {new Date(item.created_at).toLocaleDateString()}</span>

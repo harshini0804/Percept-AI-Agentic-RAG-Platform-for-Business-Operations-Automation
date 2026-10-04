@@ -20,15 +20,19 @@ rather than reusing action_gate_node, which doesn't fit this shape.
 """
 
 import json
+import logging
 
 from app.core.db import get_connection
 from app.core.orchestration import start_run
-from app.core.logging_service import log_decision, complete_agent_run
+from app.core.logging_service import log_decision, complete_agent_run, create_escalation
 from app.core.llm_gateway import call_llm
 from app.core.retrieval import search_embeddings
 from app.core.tool_registry import execute_tool
 from app.schemas.agent_contract import TriggerType, build_agent_run_output
 from app.verticals.meeting_action_items.prompts import FOLLOWUP_VERDICT_PROMPT
+
+
+logger = logging.getLogger(__name__)
 
 
 def _fetch_overdue_open_items() -> list[dict]:
@@ -109,55 +113,25 @@ def _mark_resolved(action_item_id: str) -> None:
         conn.close()
 
 
-def check_and_act_on_item(item: dict) -> dict | None:
-    """
-    Runs the full Trigger 2 check for ONE action item: retrieval,
-    LLM verdict, and the deterministic resolve/nudge/escalate/no-op
-    state machine (Section 8.4):
+def _mark_run_failed(run_id: str, exc: Exception) -> None:
+    """Closes a started run that hit an unexpected error, so it is never
+    left 'running' forever. Best effort — if recording the failure
+    itself fails, that is logged and the original error still propagates."""
+    reason = f"Follow-up check failed ({type(exc).__name__}). Please review this action item."
+    try:
+        create_escalation(run_id, reason=reason)
+        log_decision(run_id, "escalation", {"reason": reason, "pending_action": None})
+        complete_agent_run(run_id, status="escalated", confidence=None)
+    except Exception:
+        logger.exception("Could not record the failure of follow-up run %s", run_id)
 
-        verdict == 'done'                       -> mark_resolved
-        verdict in (in_progress, no_evidence)
-            AND nudge_count == 0                -> send_nudge
-            AND nudge_count >= 1 AND not escalated -> escalate_to_manager
-            AND already escalated                -> no further action
 
-    Returns None for the "already escalated, still not resolved"
-    no-op case — otherwise this item would spawn a fresh, identical
-    no-op agent_run every single scheduled cycle forever, flooding
-    the Dashboard/Evaluation page with duplicate 'completed' runs
-    that represent nothing actually happening.
-
-    The evidence search + LLM verdict still run EVERY cycle
-    regardless of this — so an already-escalated item can still
-    auto-resolve later if real evidence eventually appears. Only the
-    run/decision LOGGING is skipped when there's genuinely nothing
-    new to record, per Section 8.4's own "no further action" branch
-    for this case (see run_meeting_action_items.py's action_taken
-    handling for the same principle applied to Trigger 1).
-    """
+def _record_and_act(run_id: str, item: dict, evidence: list[dict], verdict_result: dict) -> dict:
+    """Everything that happens once a run exists: log the retrieval and
+    verdict, apply the resolve/nudge/escalate state machine, close the run."""
     action_item_id = str(item["id"])
     owner = item["owner"]
     description = item["description"]
-
-    evidence = _search_owner_activity(owner, description, str(item["created_at"].date()))
-    verdict_result = _judge_verdict(description, evidence)
-
-    is_noop = (
-        verdict_result["verdict"] != "done"
-        and item["nudge_count"] >= 1
-        and item["escalated"]
-    )
-    if is_noop:
-        print(
-            f"[scheduled followup] item {action_item_id} (owner={owner}): "
-            f"still not done, already escalated — skipping (no run logged)"
-        )
-        return None
-
-    run_id = start_run(
-        vertical="meeting_action_items",
-        trigger_type=TriggerType.SCHEDULED_FOLLOWUP.value,
-    )
 
     top_score = evidence[0]["similarity"] if evidence else None
     log_decision(
@@ -194,7 +168,7 @@ def check_and_act_on_item(item: dict) -> dict | None:
         action_taken = {"action_name": "send_nudge", "result": result}
     else:
         # not item["escalated"] — the only remaining case, since
-        # is_noop above already filtered out "already escalated".
+        # the caller already filtered out "already escalated".
         result = execute_tool(
             "meeting_action_items",
             "escalate_to_manager",
@@ -228,20 +202,93 @@ def check_and_act_on_item(item: dict) -> dict | None:
     return build_agent_run_output(state).model_dump()
 
 
+def check_and_act_on_item(item: dict) -> dict | None:
+    """
+    Runs the full Trigger 2 check for ONE action item: retrieval,
+    LLM verdict, and the deterministic resolve/nudge/escalate/no-op
+    state machine (Section 8.4):
+
+        verdict == 'done'                       -> mark_resolved
+        verdict in (in_progress, no_evidence)
+            AND nudge_count == 0                -> send_nudge
+            AND nudge_count >= 1 AND not escalated -> escalate_to_manager
+            AND already escalated                -> no further action
+
+    Returns None for the "already escalated, still not resolved"
+    no-op case — otherwise this item would spawn a fresh, identical
+    no-op agent_run every single scheduled cycle forever, flooding
+    the Dashboard/Evaluation page with duplicate 'completed' runs
+    that represent nothing actually happening.
+
+    The evidence search + LLM verdict still run EVERY cycle
+    regardless of this — so an already-escalated item can still
+    auto-resolve later if real evidence eventually appears. Only the
+    run/decision LOGGING is skipped when there's genuinely nothing
+    new to record.
+
+    Error handling: a failure BEFORE a run exists (search or LLM call,
+    e.g. an outage) creates no records and simply propagates — the item
+    is retried next cycle, and an outage cannot flood the escalation
+    queue. A failure AFTER the run starts closes that run as
+    'escalated' (never left 'running') and then propagates.
+    """
+    action_item_id = str(item["id"])
+    owner = item["owner"]
+    description = item["description"]
+
+    evidence = _search_owner_activity(owner, description, str(item["created_at"].date()))
+    verdict_result = _judge_verdict(description, evidence)
+
+    is_noop = (
+        verdict_result["verdict"] != "done"
+        and item["nudge_count"] >= 1
+        and item["escalated"]
+    )
+    if is_noop:
+        print(
+            f"[scheduled followup] item {action_item_id} (owner={owner}): "
+            f"still not done, already escalated — skipping (no run logged)"
+        )
+        return None
+
+    run_id = start_run(
+        vertical="meeting_action_items",
+        trigger_type=TriggerType.SCHEDULED_FOLLOWUP.value,
+    )
+    try:
+        return _record_and_act(run_id, item, evidence, verdict_result)
+    except Exception as exc:
+        _mark_run_failed(run_id, exc)
+        raise
+
+
 def run_followup_check() -> dict:
     """
     Entry point for the scheduled job (registered in main.py). Checks
-    every open, overdue action item independently. Not registered
-    via vertical_registry/AgentRunInput — nothing submits this
-    through the API, it's purely scheduler-driven.
+    every open, overdue action item independently — one item's failure
+    is logged and counted but never stops the remaining items from being
+    checked. Not registered via vertical_registry/AgentRunInput —
+    nothing submits this through the API, it's purely scheduler-driven.
     """
     items = _fetch_overdue_open_items()
     results = []
     skipped_noop_count = 0
+    failed_count = 0
     for item in items:
-        result = check_and_act_on_item(item)
+        try:
+            result = check_and_act_on_item(item)
+        except Exception:
+            failed_count += 1
+            logger.exception("Follow-up check failed for action item %s", item.get("id"))
+            continue
         if result is None:
             skipped_noop_count += 1
         else:
             results.append(result)
-    return {"checked": len(items), "processed": len(results), "skipped_noop": skipped_noop_count, "results": results}
+    return {
+        "checked": len(items),
+        "processed": len(results),
+        "skipped_noop": skipped_noop_count,
+        "failed": failed_count,
+        "results": results,
+    }

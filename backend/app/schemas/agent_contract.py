@@ -83,7 +83,7 @@ class AgentRunInput(BaseModel):
 class AgentRunOutput(BaseModel):
     run_id: str
     status: str  # e.g. "completed", "failed", "escalated"
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: Optional[float] = Field(ge=0.0, le=1.0)
     actions_taken: list[ActionTaken] = Field(default_factory=list)
     escalated: bool
     escalation_reason: Optional[str] = None

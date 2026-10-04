@@ -70,7 +70,7 @@ def log_decision(run_id: str, step_type: str, detail: dict) -> str:
         conn.close()
 
 
-def complete_agent_run(run_id: str, status: str, confidence: float) -> None:
+def complete_agent_run(run_id: str, status: str, confidence: float | None) -> None:
     """
     Closes out a run — called once, at Stage 5, after the confidence
     gate has decided the run's final outcome.

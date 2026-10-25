@@ -1,0 +1,3 @@
+owner: alex
+---
+Alex published the release notes for version 3.4 on the internal wiki and let the support team know in the release channel.

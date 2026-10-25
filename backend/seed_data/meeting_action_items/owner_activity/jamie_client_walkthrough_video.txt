@@ -1,0 +1,3 @@
+owner: jamie
+---
+Jamie recorded a short walkthrough of the new checkout flow for the client, covering the payment and confirmation steps, and shared the video with the account team.

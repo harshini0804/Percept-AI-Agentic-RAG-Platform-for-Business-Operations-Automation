@@ -1,0 +1,3 @@
+owner: priya
+---
+Priya scheduled next week's call with the client's technical stakeholders and sent them the agenda and the meeting invite.

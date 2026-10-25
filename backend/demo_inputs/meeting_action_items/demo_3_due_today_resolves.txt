@@ -1,0 +1,9 @@
+Release Prep Check-in — Demo
+
+Present: Alex, Priya, Morgan, Jamie
+
+A short check-in before this week's release. Priya raised that procurement is still waiting on the vendor shortlist for the new monitoring tool, which was supposed to go out earlier in the week. After a quick discussion about whether the pricing details were final, the team agreed it can go out as is. Priya will send the vendor shortlist to procurement today, with pricing and trial terms for each option.
+
+Alex mentioned that support has been asking for the release notes for version 3.4 and they still aren't published. Alex will publish the release notes for version 3.4 on the internal wiki today.
+
+Morgan said the staging environment looks healthy for the release and nothing is needed there. Jamie confirmed the design assets are already merged, so there is nothing outstanding from design.

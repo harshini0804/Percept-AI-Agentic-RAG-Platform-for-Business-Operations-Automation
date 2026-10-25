@@ -1,0 +1,9 @@
+Customer Escalation Review — Demo
+
+Present: Alex, Priya, Morgan, Jamie
+
+This meeting was called after two customers complained about last night's incomplete reports. Morgan explained that the nightly backup job stopped running after Tuesday's maintenance window, which is why the reports were missing data. There was some debate about whether to fix the old job or replace it, and the team decided to simply restore it for now. Morgan will restore the nightly backup job today.
+
+Jamie pointed out that the pricing page still shows the old plan names, which has been confusing customers who contact support. Jamie will send the revised pricing page copy to the marketing lead today.
+
+Priya noted that the customer success team has the two complaints under control and no engineering follow-up is needed from her side. Alex had nothing to add beyond confirming the reports should be accurate again once the backup job is running.

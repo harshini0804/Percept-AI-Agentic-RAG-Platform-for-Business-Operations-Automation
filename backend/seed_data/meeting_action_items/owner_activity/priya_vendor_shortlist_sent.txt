@@ -1,0 +1,3 @@
+owner: priya
+---
+Priya sent the vendor shortlist for the new monitoring tool to the procurement team, including pricing and trial terms for all five options.

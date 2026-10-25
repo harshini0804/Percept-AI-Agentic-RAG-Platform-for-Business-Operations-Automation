@@ -1,0 +1,3 @@
+owner: morgan
+---
+Morgan reviewed the storage requirements for the analytics staging database and drafted a provisioning plan, but the database has not been created yet.

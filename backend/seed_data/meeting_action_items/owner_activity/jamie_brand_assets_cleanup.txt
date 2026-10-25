@@ -1,0 +1,3 @@
+owner: jamie
+---
+Jamie reorganised the shared design library, removed outdated icon sets and renamed the brand asset folders to match the new naming convention.

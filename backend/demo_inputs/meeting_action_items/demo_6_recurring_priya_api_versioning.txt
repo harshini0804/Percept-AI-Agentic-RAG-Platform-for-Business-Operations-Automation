@@ -1,0 +1,9 @@
+Platform Planning Sync — Demo
+
+Present: Alex, Priya, Morgan, Jamie
+
+The main topic was the payments API. Two teams shipped breaking changes again last week without coordinating, and a partner integration broke as a result. The team agreed this is the same problem raised in earlier meetings and that the versioning policy still hasn't been written. Priya will draft the API versioning proposal for the payments service and circulate it for feedback by next Friday.
+
+Alex added that the payments API docs give no hint that old endpoints are being retired, which is part of why the partner was surprised. Alex will add a deprecation notice to the payments API docs by Wednesday.
+
+Morgan and Jamie had no updates this week, and the sprint is on track.

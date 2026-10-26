@@ -22,6 +22,12 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://rag_user:rag_password@postgres:5432/rag_platform
+      # Shared secrets for the automatic-intake webhooks. The pretend
+      # senders (mock-sources) use the same values. Demo defaults;
+      # override via a root-level .env file or your shell.
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-demo-github-secret-change-me}
+      ZOOM_WEBHOOK_SECRET: ${ZOOM_WEBHOOK_SECRET:-demo-zoom-secret-change-me}
+      ZOOM_DOWNLOAD_HOSTS: zoom.us,mock-sources
     env_file:
       - ./backend/.env
     ports:
@@ -33,6 +39,25 @@ services:
 
     depends_on:
       - postgres
+
+  # Pretend Zoom + GitHub for the automatic-intake demo (see
+  # docs/automatic_intake_demo.md). Control page: http://localhost:9000
+  mock-sources:
+    build:
+      context: ./mock-sources
+    container_name: rag_mock_sources
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8000
+      PUBLIC_URL: http://mock-sources:9000
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-demo-github-secret-change-me}
+      ZOOM_WEBHOOK_SECRET: ${ZOOM_WEBHOOK_SECRET:-demo-zoom-secret-change-me}
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./backend/demo_inputs/meeting_action_items:/demo_inputs:ro
+    depends_on:
+      - backend
 
   frontend:
     build:

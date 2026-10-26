@@ -7,6 +7,7 @@ import Notifications from "./pages/Notifications";
 import Admin from "./pages/Admin";
 import Evaluation from "./pages/Evaluation";
 import Tracker from "./pages/Tracker";
+import LiveFeed from "./pages/LiveFeed";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 const NAV_ITEMS = [
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
   { path: "/escalations", label: "Escalations" },
   { path: "/notifications", label: "Notifications" },
   { path: "/tracker", label: "Tracker" },
+  { path: "/live-feed", label: "Live Feed" },
   { path: "/admin", label: "Admin" },
   { path: "/evaluation", label: "Evaluation" },
 ];
@@ -34,6 +36,7 @@ function AppRoutes() {
         <Route path="/escalations" element={<Escalations />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/tracker" element={<Tracker />} />
+        <Route path="/live-feed" element={<LiveFeed />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/evaluation" element={<Evaluation />} />
       </Routes>

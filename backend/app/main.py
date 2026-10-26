@@ -7,6 +7,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.api import agent_runs, escalations, notifications, admin, evaluation, submissions, meeting_action_items, documents, integrations
 from app.api.admin import VERTICAL_SOURCE_TYPES
+from app.integrations.guard import PublicExposureGuard
 from app.core.ingestion import ingest_staging_folder
 from app.verticals.meeting_action_items.followup import run_followup_check
 
@@ -122,6 +123,10 @@ app.include_router(submissions.router)
 app.include_router(meeting_action_items.router)
 app.include_router(documents.router)
 app.include_router(integrations.router)
+
+# Added last so it is the outermost layer: requests arriving through a
+# public tunnel may only reach the signed webhook endpoints.
+app.add_middleware(PublicExposureGuard)
 
 @app.get("/health")
 def health_check():

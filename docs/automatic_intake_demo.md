@@ -1,5 +1,7 @@
 # Automatic intake for Vertical 4 (Zoom + GitHub)
 
+> **Update:** the live GitHub version of this demo (real commits, real webhook, no simulator needed) is described in [github_live_setup.md](github_live_setup.md). The simulator described below is now an optional fallback (`docker-compose --profile simulator up -d mock-sources`).
+
 ## What this shows
 
 Meeting transcripts and evidence of finished work reach the platform **without anyone uploading a file**.

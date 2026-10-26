@@ -313,7 +313,7 @@ def test_github_same_delivery_twice_is_processed_once(monkeypatch):
 
 
 @pytest.mark.parametrize("payload,reason_fragment", [
-    (_gh_payload(merged=False), "Not a merged pull request"),
+    (_gh_payload(merged=False), "Not a commit or a merged pull request"),
     (_gh_payload(repo="someone/else"), "not on the allowed list"),
     (_gh_payload(login="stranger"), "not mapped"),
 ])

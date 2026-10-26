@@ -28,6 +28,10 @@ services:
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-demo-github-secret-change-me}
       ZOOM_WEBHOOK_SECRET: ${ZOOM_WEBHOOK_SECRET:-demo-zoom-secret-change-me}
       ZOOM_DOWNLOAD_HOSTS: zoom.us,mock-sources
+      # Live GitHub demo: which GitHub account counts as which team member,
+      # and which repository may send evidence. Add more with commas.
+      GITHUB_LOGIN_MAP: ${GITHUB_LOGIN_MAP:-harshini0825=morgan}
+      GITHUB_ALLOWED_REPOS: ${GITHUB_ALLOWED_REPOS:-harshini0825/morgan-percept-ai-demo}
     env_file:
       - ./backend/.env
     ports:
@@ -43,6 +47,7 @@ services:
   # Pretend Zoom + GitHub for the automatic-intake demo (see
   # docs/automatic_intake_demo.md). Control page: http://localhost:9000
   mock-sources:
+    profiles: ["simulator"]   # off by default; start with: docker-compose --profile simulator up -d mock-sources
     build:
       context: ./mock-sources
     container_name: rag_mock_sources

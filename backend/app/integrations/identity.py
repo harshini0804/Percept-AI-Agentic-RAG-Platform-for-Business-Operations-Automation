@@ -1,35 +1,64 @@
 """
 Who and what this platform is willing to listen to.
 
-Two small allow-lists, kept in code on purpose so they are reviewed
-like code:
+Two small allow-lists:
 
-- GITHUB_LOGIN_TO_OWNER maps a GitHub account to the first name used
-  in meeting transcripts (action_items.owner). A merge by an account
-  that is not listed is recorded but NOT turned into evidence.
-- ALLOWED_GITHUB_REPOS: only merges in these repositories count.
+- GitHub account -> owner: maps a GitHub login to the first name used in
+  meeting transcripts (action_items.owner). Activity from an account that
+  is not listed is recorded in the Live Feed but NOT turned into evidence.
+- Allowed repositories: only activity in these repositories counts.
+
+Built-in demo values always apply. Settings ADD to them (they never
+remove them), so the pretend senders keep working next to a real
+GitHub connection:
+
+    GITHUB_LOGIN_MAP="harshini0825=morgan,other-login=alex"
+    GITHUB_ALLOWED_REPOS="harshini0825/morgan-percept-ai-demo"
 
 In production these would come from an admin screen or the company
-directory; the demo uses fixed values that match the demo owners.
+directory.
 """
 
 import os
 from urllib.parse import urlparse
 
-GITHUB_LOGIN_TO_OWNER = {
+DEFAULT_GITHUB_LOGIN_TO_OWNER = {
     "alex-dev": "alex",
     "priya-dev": "priya",
     "morgan-dev": "morgan",
     "jamie-dev": "jamie",
 }
 
-ALLOWED_GITHUB_REPOS = {"acme-corp/platform"}
+DEFAULT_ALLOWED_GITHUB_REPOS = {"acme-corp/platform"}
+
+
+def _split(raw: str) -> list[str]:
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def github_login_map() -> dict[str, str]:
+    mapping = dict(DEFAULT_GITHUB_LOGIN_TO_OWNER)
+    for pair in _split(os.getenv("GITHUB_LOGIN_MAP", "")):
+        login, sep, owner = pair.partition("=")
+        if sep and login.strip() and owner.strip():
+            mapping[login.strip().lower()] = owner.strip().lower()
+    return mapping
+
+
+def allowed_github_repos() -> set[str]:
+    repos = {r.lower() for r in DEFAULT_ALLOWED_GITHUB_REPOS}
+    repos.update(r.lower() for r in _split(os.getenv("GITHUB_ALLOWED_REPOS", "")))
+    return repos
 
 
 def owner_for_github_login(login: str | None) -> str | None:
     if not login:
         return None
-    return GITHUB_LOGIN_TO_OWNER.get(login.strip().lower())
+    return github_login_map().get(login.strip().lower())
+
+
+def is_allowed_repo(repo: str | None) -> bool:
+    return bool(repo) and repo.strip().lower() in allowed_github_repos()
 
 
 def allowed_download_hosts() -> list[str]:

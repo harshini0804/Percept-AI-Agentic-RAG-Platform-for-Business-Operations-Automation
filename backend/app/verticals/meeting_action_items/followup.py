@@ -21,6 +21,7 @@ rather than reusing action_gate_node, which doesn't fit this shape.
 
 import json
 import logging
+from datetime import datetime
 
 from app.core.db import get_connection
 from app.core.orchestration import start_run
@@ -53,20 +54,32 @@ def _fetch_overdue_open_items() -> list[dict]:
         conn.close()
 
 
-def _search_owner_activity(owner: str, description: str, since: str) -> list[dict]:
+def _search_owner_activity(owner: str, description: str, since: "str | datetime") -> list[dict]:
     """
     Section 8.4: search embeddings (source_type='owner_activity',
-    same owner, date > item.created_at) using the item description
-    as the query. No retry-on-weak-match here, matching Trigger 1's
-    recurrence check — Section 8.4 doesn't call for one for this
-    search either.
+    same owner, happened after item.created_at) using the item
+    description as the query. No retry-on-weak-match here, matching
+    Trigger 1's recurrence check — Section 8.4 doesn't call for one
+    for this search either.
+
+    "Happened after" is compared as an exact moment, not a calendar
+    date, so evidence that arrives minutes after the meeting (e.g. a
+    GitHub merge delivered by webhook the same day) counts. Evidence
+    carries `occurred_at` (a full timestamp) when it came from an
+    integration; older/seeded evidence only has a `date`, which is
+    treated as midnight at the start of that day — exactly equivalent
+    to the previous date-only rule for that data.
     """
     return search_embeddings(
         query_text=description,
         vertical="meeting_action_items",
         source_type="owner_activity",
         top_k=5,
-        extra_filter_sql=" AND metadata->>'owner' = %s AND (metadata->>'date')::date > %s",
+        extra_filter_sql=(
+            " AND metadata->>'owner' = %s"
+            " AND COALESCE((metadata->>'occurred_at')::timestamptz,"
+            " (metadata->>'date')::date::timestamptz) > %s"
+        ),
         extra_filter_params=(owner, since),
     )
 
@@ -202,7 +215,11 @@ def _record_and_act(run_id: str, item: dict, evidence: list[dict], verdict_resul
     return build_agent_run_output(state).model_dump()
 
 
-def check_and_act_on_item(item: dict) -> dict | None:
+def check_and_act_on_item(
+    item: dict,
+    resolve_only: bool = False,
+    trigger_type: TriggerType = TriggerType.SCHEDULED_FOLLOWUP,
+) -> dict | None:
     """
     Runs the full Trigger 2 check for ONE action item: retrieval,
     LLM verdict, and the deterministic resolve/nudge/escalate/no-op
@@ -231,13 +248,22 @@ def check_and_act_on_item(item: dict) -> dict | None:
     is retried next cycle, and an outage cannot flood the escalation
     queue. A failure AFTER the run starts closes that run as
     'escalated' (never left 'running') and then propagates.
+
+    resolve_only=True is used when new evidence has just arrived
+    (see check_owner_for_new_evidence): the only outcome acted on is
+    "done" -> mark_resolved. Any other verdict returns None without
+    logging a run, so a burst of unrelated evidence cannot trigger
+    nudges or escalations ahead of the normal schedule.
     """
     action_item_id = str(item["id"])
     owner = item["owner"]
     description = item["description"]
 
-    evidence = _search_owner_activity(owner, description, str(item["created_at"].date()))
+    evidence = _search_owner_activity(owner, description, item["created_at"])
     verdict_result = _judge_verdict(description, evidence)
+
+    if resolve_only and verdict_result["verdict"] != "done":
+        return None
 
     is_noop = (
         verdict_result["verdict"] != "done"
@@ -253,13 +279,59 @@ def check_and_act_on_item(item: dict) -> dict | None:
 
     run_id = start_run(
         vertical="meeting_action_items",
-        trigger_type=TriggerType.SCHEDULED_FOLLOWUP.value,
+        trigger_type=trigger_type.value,
     )
     try:
         return _record_and_act(run_id, item, evidence, verdict_result)
     except Exception as exc:
         _mark_run_failed(run_id, exc)
         raise
+
+
+def _fetch_open_items_for_owner(owner: str) -> list[dict]:
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM action_items WHERE status = 'open' AND owner = %s "
+                "ORDER BY created_at;",
+                (owner,),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def check_owner_for_new_evidence(owner: str) -> list[dict]:
+    """
+    Event-driven counterpart to the scheduled check: called right
+    after a new piece of owner_activity evidence is stored (e.g. from
+    a GitHub webhook). Re-checks that owner's open items — due or not
+    yet due, since finishing early is still finishing — but ONLY to
+    see whether any is now done (resolve_only). Nudging and escalation
+    remain the scheduled job's business.
+
+    Returns one entry per item resolved: {action_item_id,
+    description, run_id}. One item failing never stops the others.
+    """
+    resolved = []
+    for item in _fetch_open_items_for_owner(owner):
+        try:
+            output = check_and_act_on_item(
+                item, resolve_only=True, trigger_type=TriggerType.INTEGRATION_EVENT
+            )
+        except Exception:
+            logger.exception("Event-driven check failed for action item %s", item.get("id"))
+            continue
+        if output is not None:
+            resolved.append(
+                {
+                    "action_item_id": str(item["id"]),
+                    "description": item["description"],
+                    "run_id": output["run_id"],
+                }
+            )
+    return resolved
 
 
 def run_followup_check() -> dict:

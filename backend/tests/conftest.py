@@ -43,6 +43,7 @@ SCHEMA_PATH = pathlib.Path(__file__).resolve().parents[1] / "db" / "schema.sql"
 # means a forgotten new table here fails loudly via a leftover-row
 # test failure instead of silently going unreset.
 TABLES_IN_DELETE_ORDER = [
+    "integration_events",
     "agent_decisions",
     "escalations",
     "notifications",

@@ -41,6 +41,10 @@ class TriggerType(str, Enum):
     # Admin panel manual resync (Section 6.4) — ingestion only, not
     # normally a full agent run, but included for completeness
     MANUAL_RESYNC = "manual_resync"
+    # A run started by an external system's webhook (e.g. a Zoom
+    # transcript or a GitHub merge) instead of a person submitting
+    # a document. Vertical 4's automatic-intake path.
+    INTEGRATION_EVENT = "integration_event"
 
 
 class ActionTaken(BaseModel):

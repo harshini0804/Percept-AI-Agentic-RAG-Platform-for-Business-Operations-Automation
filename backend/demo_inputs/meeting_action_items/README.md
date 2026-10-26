@@ -73,3 +73,9 @@ setup and Jamie's mobile feedback, both dated five days out).
 
 The least certain verdict is Morgan's onboarding docs, because his older
 staging-database doc also mentions onboarding.
+
+## Automatic intake (no upload)
+
+`demo_4_due_today_no_evidence.txt` and `demo_7_wrong_document_contract.txt` are also what the pretend
+Zoom sender "plays" in the automatic-intake demo (control page http://localhost:9000). Full walkthrough:
+`docs/automatic_intake_demo.md`.

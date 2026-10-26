@@ -214,3 +214,31 @@ CREATE TABLE action_items (
 );
 
 CREATE INDEX idx_action_items_status_deadline ON action_items (status, deadline);
+
+-- ============================================================
+-- INTEGRATION EVENTS (automatic intake from external apps, e.g.
+-- Zoom transcripts and GitHub merges delivered by webhook).
+-- One row per message received: the Live Feed page reads this, and
+-- the partial unique index below is what makes a repeated delivery
+-- of the SAME message harmless (the second copy is recorded as a
+-- 'duplicate' row instead of being processed again).
+-- run_id is deliberately NOT a hard FK: it is informational only.
+-- ============================================================
+
+CREATE TABLE integration_events (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    source          TEXT NOT NULL,
+    delivery_id     TEXT NOT NULL,
+    event_type      TEXT,
+    status          TEXT NOT NULL,
+    summary         TEXT,
+    owner           TEXT,
+    run_id          UUID,
+    detail          JSONB,
+    received_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX uq_integration_events_delivery
+    ON integration_events (source, delivery_id)
+    WHERE status NOT IN ('duplicate', 'rejected');
+CREATE INDEX idx_integration_events_received ON integration_events (received_at DESC);

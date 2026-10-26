@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from app.api import agent_runs, escalations, notifications, admin, evaluation, submissions, meeting_action_items, documents
+from app.api import agent_runs, escalations, notifications, admin, evaluation, submissions, meeting_action_items, documents, integrations
 from app.api.admin import VERTICAL_SOURCE_TYPES
 from app.core.ingestion import ingest_staging_folder
 from app.verticals.meeting_action_items.followup import run_followup_check
@@ -121,6 +121,7 @@ app.include_router(evaluation.router)
 app.include_router(submissions.router)
 app.include_router(meeting_action_items.router)
 app.include_router(documents.router)
+app.include_router(integrations.router)
 
 @app.get("/health")
 def health_check():

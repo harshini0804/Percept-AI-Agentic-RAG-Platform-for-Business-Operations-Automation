@@ -6,6 +6,7 @@ const TRIGGER_TYPE_LABELS: Record<string, string> = {
   scheduled_ingestion: "Scheduled Ingestion",
   scheduled_followup: "Scheduled Follow-up",
   manual_resync: "Manual Resync",
+  integration_event: "Received automatically",
 };
 
 export function formatTriggerType(triggerType: string): string {

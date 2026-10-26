@@ -19,6 +19,7 @@ export const TriggerType = {
   SCHEDULED_INGESTION: "scheduled_ingestion",
   SCHEDULED_FOLLOWUP: "scheduled_followup",
   MANUAL_RESYNC: "manual_resync",
+  INTEGRATION_EVENT: "integration_event",
 } as const;
 export type TriggerType = (typeof TriggerType)[keyof typeof TriggerType];
 

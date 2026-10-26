@@ -67,12 +67,32 @@ def _hex_hmac(secret: str, message: bytes) -> str:
     return hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
 
 
+def _explain(response: httpx.Response | None) -> str:
+    """The platform's answer in plain words, for the control page."""
+    if response is None:
+        return ""
+    body = _safe_json(response)
+    status = body.get("status") if isinstance(body, dict) else None
+    if response.status_code == 202:
+        return "Accepted — the platform is processing it."
+    if response.status_code == 200 and status == "duplicate":
+        return "Already received — not processed again."
+    if response.status_code == 200 and status == "ignored":
+        return f"Ignored: {body.get('reason', 'not something the platform acts on')}"
+    if response.status_code == 401:
+        return "Rejected: the signature did not match, so nothing was read."
+    if response.status_code == 503:
+        return "Platform is not configured with a secret, so it refuses everything."
+    return "Unexpected answer from the platform."
+
+
 def _record(step: str, response: httpx.Response | None, note: str = "") -> dict:
     entry = {
         "time": datetime.now().strftime("%H:%M:%S"),
         "step": step,
         "platform_answered": None if response is None else response.status_code,
         "platform_said": None if response is None else _safe_json(response),
+        "meaning": _explain(response),
         "note": note,
     }
     _log.append(entry)
@@ -87,8 +107,12 @@ def _safe_json(response: httpx.Response):
         return response.text[:200]
 
 
-def _send(source: str, path: str, raw: bytes, headers: dict) -> httpx.Response:
-    _last[source] = {"path": path, "raw": raw, "headers": headers}
+def _send(source: str, path: str, raw: bytes, headers: dict, remember: bool = True) -> httpx.Response:
+    # Only genuine messages are remembered for the "send it again" button;
+    # otherwise clicking the forged-message button first would make "again"
+    # replay the forged message instead of a real one.
+    if remember:
+        _last[source] = {"path": path, "raw": raw, "headers": headers}
     return httpx.post(f"{BACKEND_URL}{path}", content=raw, headers=headers, timeout=30)
 
 
@@ -193,9 +217,12 @@ def _github_payload(person: str) -> dict:
     }
 
 
-def _send_github_merge(person: str, secret: str, label: str) -> dict:
+def _send_github_merge(person: str, secret: str, label: str, remember: bool = True) -> dict:
     raw = json.dumps(_github_payload(person)).encode()
-    response = _send("github", "/integrations/github", raw, _github_headers(raw, str(uuid.uuid4()), secret))
+    response = _send(
+        "github", "/integrations/github", raw, _github_headers(raw, str(uuid.uuid4()), secret),
+        remember=remember,
+    )
     return _record(label, response)
 
 
@@ -222,7 +249,9 @@ def play_github_merge(person: str):
 @app.post("/play/forged")
 def play_forged():
     """A message signed with the WRONG secret — what an outsider without the shared secret would send."""
-    return _send_github_merge("morgan", "not-the-real-secret", "FORGED GitHub message (wrong secret)")
+    return _send_github_merge(
+        "morgan", "not-the-real-secret", "FORGED GitHub message (wrong secret)", remember=False
+    )
 
 
 @app.post("/play/duplicate/{source}")
@@ -230,7 +259,7 @@ def play_duplicate(source: str):
     """Re-sends the most recent message of that source byte-for-byte, as providers do after a timeout."""
     last = _last.get(source)
     if last is None:
-        raise HTTPException(404, f"No {source} message has been sent yet.")
+        raise HTTPException(404, f"No genuine {source} message has been sent yet — send one first.")
     response = httpx.post(f"{BACKEND_URL}{last['path']}", content=last["raw"], headers=last["headers"], timeout=30)
     return _record(f"Same {source} message sent AGAIN", response)
 
@@ -304,13 +333,13 @@ CONTROL_PAGE = """<!doctype html>
 </div>
 <div class="card"><b>What was sent</b>
  <table><thead><tr><th>Time</th><th>Sent</th><th>Platform answered</th></tr></thead><tbody id="log"></tbody></table>
- <p class="note">See the results on the platform: <a href="http://localhost:5173/live-feed" target="_blank">Live Feed</a> and <a href="http://localhost:5173/tracker" target="_blank">Tracker</a>.</p>
+ <p class="note">See the results on the platform: <a href="http://localhost:5173/live-feed" target="_blank">Live Feed</a> (every message and what the platform decided) and <a href="http://localhost:5173/tracker" target="_blank">Tracker</a>.</p>
 </div>
 <script>
 async function refresh(){
   const rows = await (await fetch('/log')).json();
   document.getElementById('log').innerHTML = rows.map(r =>
-    `<tr><td>${r.time}</td><td>${r.step}</td><td><code>${r.platform_answered ?? '—'}</code> ${r.note || ''}</td></tr>`).join('');
+    `<tr><td>${r.time}</td><td>${r.step}</td><td><code>${r.platform_answered ?? '—'}</code> ${r.meaning || ''} ${r.note || ''}</td></tr>`).join('');
 }
 async function play(path, btn){
   btn.disabled = true;

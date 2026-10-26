@@ -14,11 +14,11 @@ live demo.
 
 ## Before a demo
 
-1. **Wipe this vertical's data** (the `escalations` step is required once any
+1. **Wipe this vertical's data** (this also clears the Live Feed; the `escalations` step is required once any
    wrong-document run has been escalated, otherwise the delete fails):
 
    ```
-   docker exec -it rag_postgres psql -U rag_user -d rag_platform -c "DELETE FROM agent_decisions WHERE run_id IN (SELECT id FROM agent_runs WHERE vertical = 'meeting_action_items'); DELETE FROM notifications WHERE run_id IN (SELECT id FROM agent_runs WHERE vertical = 'meeting_action_items'); DELETE FROM escalations WHERE run_id IN (SELECT id FROM agent_runs WHERE vertical = 'meeting_action_items'); DELETE FROM agent_runs WHERE vertical = 'meeting_action_items'; DELETE FROM embeddings WHERE vertical = 'meeting_action_items'; DELETE FROM action_items; DELETE FROM meetings;"
+   docker exec -it rag_postgres psql -U rag_user -d rag_platform -c "DELETE FROM integration_events; DELETE FROM agent_decisions WHERE run_id IN (SELECT id FROM agent_runs WHERE vertical = 'meeting_action_items'); DELETE FROM notifications WHERE run_id IN (SELECT id FROM agent_runs WHERE vertical = 'meeting_action_items'); DELETE FROM escalations WHERE run_id IN (SELECT id FROM agent_runs WHERE vertical = 'meeting_action_items'); DELETE FROM agent_runs WHERE vertical = 'meeting_action_items'; DELETE FROM embeddings WHERE vertical = 'meeting_action_items'; DELETE FROM action_items; DELETE FROM meetings;"
    ```
 
 2. **Reseed on the day of the demo:** `docker exec -it rag_backend python seed.py`.

@@ -33,15 +33,15 @@ This is the answer to "anyone can upload unrelated documents":
 
 Start everything: `docker-compose up --build -d`, then open **http://localhost:9000** (the pretend senders) and the platform at http://localhost:5173.
 
-Before a run, clear this vertical's data (see `backend/demo_inputs/meeting_action_items/README.md`) and reseed: `docker exec -it rag_backend python seed.py`.
+Before a rehearsal or the real demo, clear this vertical's data (the command in `backend/demo_inputs/meeting_action_items/README.md`, which also clears the Live Feed) and reseed: `docker exec -it rag_backend python seed.py`. Not needed for ordinary testing.
 
 Suggested order (about 3 minutes):
 
-1. **Platform: Tracker** — show the existing items. Nothing has been uploaded.
-2. **Pretend senders: "Meeting ends (Customer Escalation Review)"**. Within a few seconds the Tracker gains two items (Morgan: restore the backup job; Jamie: send the pricing page copy). Open the run: it says "Received automatically".
-3. **Pretend senders: "Morgan's pull request is merged"**. Morgan's item flips to resolved within seconds. Jamie's stays open (no pull request from him).
-4. **Pretend senders: "Send a forged message"** — the platform answers 401 and the Live Feed shows it as rejected.
-5. **"Send the last GitHub message again"** — shown as a duplicate, not processed twice.
+1. **Platform: Tracker and Live Feed** — show the existing items and an empty (or short) feed. Nothing has been uploaded.
+2. **Pretend senders: "Meeting ends (Customer Escalation Review)"**. The Live Feed shows "Transcript received" and, a few seconds later, "Handled". Within a few seconds the Tracker gains two items (Morgan: restore the backup job; Jamie: send the pricing page copy). Open the run: it says "Received automatically".
+3. **Pretend senders: "Morgan's pull request is merged"**. The Live Feed shows the merge and which item it resolved; Morgan's item flips to resolved within seconds. Jamie's stays open (no pull request from him).
+4. **Pretend senders: "Send a forged message"** — the platform answers 401 and the Live Feed shows a red "Rejected" card with the reason.
+5. **"Send the last GitHub message again"** — the Live Feed shows "Repeat — not processed again".
 6. Optional: **"Meeting ends — but the file is a contract"** — the run is sent to Escalations with a reason.
 
 "Play the whole story" does steps 2 and 3 automatically.

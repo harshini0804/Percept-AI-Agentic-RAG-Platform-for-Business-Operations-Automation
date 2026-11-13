@@ -86,3 +86,67 @@ def parse_vtt(text: str) -> str:
             continue
         lines.append(line)
     return "\n".join(lines)
+
+
+MAX_COMMITS_PER_PUSH = 20
+MAX_FILES_PER_COMMIT = 5
+MAX_MESSAGE_CHARS = 500
+
+
+def parse_github_push(event_name: str, payload: dict) -> dict | None:
+    """
+    Reads a GitHub "push" message (new commits arriving in a repository).
+    Returns None when there is nothing to read (not a push, a deleted
+    branch, no commits). Otherwise:
+
+        {repo, branch, is_default_branch, commits: [...]}
+
+    Each commit: {message, timestamp, url, author_login, files, is_merge}.
+    The author's GitHub login comes from the commit itself when GitHub
+    could link its email to an account; otherwise it falls back to the
+    person who pushed. Merge commits are flagged so they are not counted
+    twice (the pull-request message already covers them).
+    """
+    if event_name != "push" or not isinstance(payload, dict) or payload.get("deleted"):
+        return None
+    raw_commits = payload.get("commits")
+    if not isinstance(raw_commits, list) or not raw_commits:
+        return None
+
+    repository = payload.get("repository") or {}
+    ref = payload.get("ref") or ""
+    branch = ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else ref
+    default_branch = repository.get("default_branch") or repository.get("master_branch") or "main"
+    pusher_login = (payload.get("sender") or {}).get("login") or (payload.get("pusher") or {}).get("name")
+
+    commits = []
+    for raw in raw_commits[:MAX_COMMITS_PER_PUSH]:
+        if not isinstance(raw, dict):
+            continue
+        message = (raw.get("message") or "").strip()
+        if not message:
+            continue
+        author = raw.get("author") or {}
+        committer = raw.get("committer") or {}
+        login = author.get("username") or committer.get("username") or pusher_login
+        files = []
+        for key in ("added", "modified", "removed"):
+            for name in raw.get(key) or []:
+                if name not in files:
+                    files.append(name)
+        commits.append({
+            "message": message[:MAX_MESSAGE_CHARS],
+            "timestamp": normalise_timestamp(raw.get("timestamp")),
+            "url": raw.get("url"),
+            "author_login": login,
+            "files": files[:MAX_FILES_PER_COMMIT],
+            "is_merge": message.startswith(("Merge pull request", "Merge branch", "Merge remote-tracking")),
+        })
+    if not commits:
+        return None
+    return {
+        "repo": repository.get("full_name"),
+        "branch": branch,
+        "is_default_branch": branch == default_branch,
+        "commits": commits,
+    }

@@ -139,3 +139,60 @@ def process_github_merge(event_id: str, owner: str, merge: dict) -> None:
             event_id, status="failed",
             summary=f"Processing failed ({type(exc).__name__}). The merge was not recorded as activity.",
         )
+
+
+def _store_evidence(owner: str, text: str, occurred_at: str, ref: str | None) -> None:
+    upsert_embedding(
+        vertical=VERTICAL,
+        source_type="owner_activity",
+        chunk_text=text,
+        metadata={
+            "owner": owner,
+            "date": occurred_at[:10],
+            "occurred_at": occurred_at,
+            "source": "github",
+            "ref": ref,
+        },
+    )
+
+
+def process_github_commits(event_id: str, repo: str, commits_by_owner: dict[str, list[dict]]) -> None:
+    """
+    Stores each commit as evidence for its author, then re-checks each
+    author's open items ONCE (resolve-only). One event can carry commits
+    by several people; each person's items are checked independently.
+    """
+    try:
+        repo_name = repo.split("/")[-1]
+        resolved_all: list[dict] = []
+        total = 0
+        for owner, commits in commits_by_owner.items():
+            for commit in commits:
+                text = f'{owner.capitalize()} committed to {repo_name}: "{commit["message"]}".'
+                if commit["files"]:
+                    text += f" Changed files: {', '.join(commit['files'])}."
+                _store_evidence(owner, text, commit["timestamp"], commit.get("url"))
+                total += 1
+            resolved_all.extend(check_owner_for_new_evidence(owner))
+
+        who = ", ".join(commits_by_owner)
+        first = next(iter(commits_by_owner.values()))[0]["message"].splitlines()[0]
+        label = f'Commit "{first}"' if total == 1 else f"{total} commits (latest: \"{first}\")"
+        if resolved_all:
+            names = "; ".join(r["description"] for r in resolved_all)
+            summary = f"{label} by {who} — resolved {len(resolved_all)} item(s): {names}"
+        else:
+            summary = f"{label} by {who} stored as activity — no open item matched."
+        update_event(
+            event_id,
+            status="processed",
+            summary=summary,
+            run_id=resolved_all[0]["run_id"] if resolved_all else None,
+            detail={"resolved": resolved_all, "commits": total, "repo": repo},
+        )
+    except Exception as exc:
+        logger.exception("Processing of GitHub push event %s failed", event_id)
+        update_event(
+            event_id, status="failed",
+            summary=f"Processing failed ({type(exc).__name__}). The commits were not recorded as activity.",
+        )

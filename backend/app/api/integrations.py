@@ -2,7 +2,7 @@
 Integrations API — the automatic-intake doors for Vertical 4.
 
 POST /integrations/zoom    receives "a meeting transcript is ready"
-POST /integrations/github  receives "a pull request was merged"
+POST /integrations/github  receives "a commit was pushed" or "a pull request was merged"
 GET  /integrations/events  the Live Feed's data
 
 Each webhook follows the same order, cheapest and safest check first:
@@ -27,13 +27,21 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.integrations import event_log
-from app.integrations.handlers import process_github_merge, process_zoom_transcript
+from app.integrations.handlers import (
+    process_github_commits,
+    process_github_merge,
+    process_zoom_transcript,
+)
 from app.integrations.identity import (
-    ALLOWED_GITHUB_REPOS,
     is_allowed_download_url,
+    is_allowed_repo,
     owner_for_github_login,
 )
-from app.integrations.parsing import parse_github_merge, parse_zoom_transcript_event
+from app.integrations.parsing import (
+    parse_github_merge,
+    parse_github_push,
+    parse_zoom_transcript_event,
+)
 from app.integrations.security import (
     verify_github_signature,
     verify_zoom_signature,
@@ -90,10 +98,13 @@ async def github_webhook(request: Request, background: BackgroundTasks):
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Body is not valid JSON.")
 
+    if event_name == "push":
+        return _accept_github_push(payload, delivery_id, background)
+
     merge = parse_github_merge(event_name, payload)
     if merge is None:
-        return _ignored("github", delivery_id, event_name, "Not a merged pull request.")
-    if merge["repo"] not in ALLOWED_GITHUB_REPOS:
+        return _ignored("github", delivery_id, event_name, "Not a commit or a merged pull request.")
+    if not is_allowed_repo(merge["repo"]):
         return _ignored("github", delivery_id, event_name, f'Repository "{merge["repo"]}" is not on the allowed list.')
     owner = owner_for_github_login(merge["author_login"])
     if owner is None:
@@ -108,6 +119,47 @@ async def github_webhook(request: Request, background: BackgroundTasks):
         return {"status": "duplicate"}
 
     background.add_task(process_github_merge, event_id, owner, merge)
+    return JSONResponse({"status": "accepted", "event_id": event_id}, status_code=202)
+
+
+def _accept_github_push(payload: dict, delivery_id: str, background: BackgroundTasks) -> JSONResponse:
+    push = parse_github_push("push", payload)
+    if push is None:
+        return _ignored("github", delivery_id, "push", "Push with no new commits.")
+    if not is_allowed_repo(push["repo"]):
+        return _ignored("github", delivery_id, "push", f'Repository "{push["repo"]}" is not on the allowed list.')
+    if not push["is_default_branch"]:
+        return _ignored(
+            "github", delivery_id, "push",
+            f'Commits on branch "{push["branch"]}" are ignored — only the default branch counts as finished work.',
+        )
+
+    commits_by_owner: dict[str, list[dict]] = {}
+    only_merges = True
+    for commit in push["commits"]:
+        if commit["is_merge"]:
+            continue
+        only_merges = False
+        owner = owner_for_github_login(commit["author_login"])
+        if owner:
+            commits_by_owner.setdefault(owner, []).append(commit)
+    if not commits_by_owner:
+        reason = (
+            "Only merge commits (already covered by the pull-request message)."
+            if only_merges
+            else "No commit by a GitHub account that is mapped to a team member."
+        )
+        return _ignored("github", delivery_id, "push", reason)
+
+    event_id, is_new = event_log.record_event(
+        "github", delivery_id, "push", "received",
+        summary=f'Push to {push["repo"]} by {", ".join(commits_by_owner)} — processing.',
+        owner=", ".join(commits_by_owner),
+    )
+    if not is_new:
+        return JSONResponse({"status": "duplicate"}, status_code=200)
+
+    background.add_task(process_github_commits, event_id, push["repo"], commits_by_owner)
     return JSONResponse({"status": "accepted", "event_id": event_id}, status_code=202)
 
 

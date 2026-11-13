@@ -1,0 +1,11 @@
+Release Readiness Review — Rehearsal
+
+Present: Alex, Priya, Morgan, Jamie
+
+The release candidate is in good shape, but Morgan flagged three operational gaps. The TLS certificate on the staging gateway expired last week and test traffic is failing. Morgan will rotate the expired TLS certificate on the staging gateway by next Wednesday.
+
+The nightly report export fails outright whenever the storage service times out, with no second attempt. Morgan will add retry logic to the report export job by next Wednesday.
+
+Morgan also noted that the audit log table still uses the old column layout, which blocks the compliance export. Morgan will migrate the audit log table to the new schema by next Wednesday.
+
+Alex, Priya and Jamie had no action items this week.

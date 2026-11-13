@@ -1,0 +1,11 @@
+Platform Reliability Review — Demo
+
+Present: Alex, Priya, Morgan, Jamie
+
+Reporting dashboards slowed down badly during the month-end rush because the database ran out of connections. Morgan will increase the database connection pool limit for the reporting service by next Wednesday.
+
+The public search endpoint was hit by a burst of automated traffic last weekend and nearly went down. Morgan will add rate limiting to the public search endpoint by next Wednesday.
+
+There is also no standing plan for who carries the on-call phone over the holidays. Morgan will draft the holiday on-call schedule by next Wednesday.
+
+Alex, Priya and Jamie had no action items this week.
